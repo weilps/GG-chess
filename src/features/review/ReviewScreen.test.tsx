@@ -45,4 +45,17 @@ describe("ReviewScreen", () => {
     fireEvent.click(screen.getByText(/flip board/i));
     expect(screen.getByTestId("board-orientation")).toHaveAttribute("data-orientation", "black");
   });
+
+  it("does not offer engine analysis for a Result * game", () => {
+    render(
+      <ReviewScreen
+        game={{ ...game, result: "*" }}
+        repository={repository}
+        onBack={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+    expect(screen.getByText("Analysis is available only for completed games.")).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Analyze" })).not.toBeInTheDocument();
+  });
 });

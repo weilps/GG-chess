@@ -55,6 +55,7 @@ export async function subscribeToAnalysisProgress(
 export async function analyzePositions(request: {
   analysisId: string;
   enginePath: string;
+  gameResult: string;
   depth: number;
   positions: string[];
   positionIndexes: number[];

@@ -47,6 +47,7 @@ pub struct PositionEvaluation {
 pub struct AnalyzeRequest {
     pub analysis_id: String,
     pub engine_path: String,
+    pub game_result: String,
     pub depth: u32,
     pub positions: Vec<String>,
     pub position_indexes: Vec<usize>,
@@ -341,6 +342,10 @@ fn white_perspective_multiplier(fen: &str) -> Result<i32, String> {
     }
 }
 
+fn is_completed_game_result(result: &str) -> bool {
+    matches!(result, "1-0" | "0-1" | "1/2-1/2")
+}
+
 fn finish_evaluation(
     position_index: usize,
     white_multiplier: i32,
@@ -426,6 +431,9 @@ pub async fn analyze_game(
     app: tauri::AppHandle,
     state: State<'_, EngineState>,
 ) -> Result<AnalyzeResponse, String> {
+    if !is_completed_game_result(&request.game_result) {
+        return Err("analysis_unfinished_game".to_string());
+    }
     if request.depth == 0 || request.depth > 50 {
         return Err("engine_invalid_depth".to_string());
     }
@@ -506,6 +514,83 @@ pub async fn analyze_game(
 mod tests {
     use super::*;
 
+    const FAKE_UCI_SOURCE: &str = r#"
+use std::io::{self, BufRead, Write};
+
+fn main() {
+    let stdin = io::stdin();
+    let mut stdout = io::stdout();
+    let mut position = String::new();
+    for line in stdin.lock().lines() {
+        let line = line.expect("fake engine stdin");
+        if line == "uci" {
+            writeln!(stdout, "id name ChessMate FakeUCI 1").unwrap();
+            writeln!(stdout, "uciok").unwrap();
+        } else if line == "isready" {
+            writeln!(stdout, "readyok").unwrap();
+        } else if let Some(fen) = line.strip_prefix("position fen ") {
+            position = fen.to_string();
+        } else if let Some(depth) = line.strip_prefix("go depth ") {
+            if position.starts_with("7k/6Q1/6K1") {
+                writeln!(stdout, "info depth 0 score mate 0").unwrap();
+                writeln!(stdout, "bestmove (none)").unwrap();
+            } else {
+                writeln!(stdout, "info depth {depth} score cp 42 pv e2e4 e7e5").unwrap();
+                writeln!(stdout, "bestmove e2e4").unwrap();
+            }
+        } else if line == "quit" {
+            break;
+        }
+        stdout.flush().unwrap();
+    }
+}
+"#;
+
+    fn rustc_command() -> PathBuf {
+        if let Some(configured) = std::env::var_os("RUSTC") {
+            return PathBuf::from(configured);
+        }
+        if let Some(profile) = std::env::var_os("USERPROFILE") {
+            let candidate = PathBuf::from(profile)
+                .join(".cargo")
+                .join("bin")
+                .join("rustc.exe");
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            let candidate = PathBuf::from(home).join(".cargo").join("bin").join("rustc");
+            if candidate.is_file() {
+                return candidate;
+            }
+        }
+        PathBuf::from("rustc")
+    }
+
+    fn compile_fake_uci_engine() -> (PathBuf, PathBuf) {
+        let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
+            .join("target")
+            .join(format!("fake-uci-engine-{}", std::process::id()));
+        fs::create_dir_all(&directory).unwrap();
+        let source = directory.join("fake_uci_engine.rs");
+        let executable = directory.join(if cfg!(windows) {
+            "fake_uci_engine.exe"
+        } else {
+            "fake_uci_engine"
+        });
+        fs::write(&source, FAKE_UCI_SOURCE).unwrap();
+        let status = Command::new(rustc_command())
+            .arg("--edition=2021")
+            .arg(&source)
+            .arg("-o")
+            .arg(&executable)
+            .status()
+            .expect("rustc must compile the deterministic fake UCI engine");
+        assert!(status.success());
+        (directory, executable)
+    }
+
     #[test]
     fn parses_deterministic_fake_uci_centipawn_transcript() {
         let info = parse_info_line("info depth 18 seldepth 24 score cp 35 nodes 100 pv e2e4 e7e5")
@@ -555,6 +640,15 @@ mod tests {
     }
 
     #[test]
+    fn recognizes_only_completed_standard_game_results() {
+        assert!(is_completed_game_result("1-0"));
+        assert!(is_completed_game_result("0-1"));
+        assert!(is_completed_game_result("1/2-1/2"));
+        assert!(!is_completed_game_result("*"));
+        assert!(!is_completed_game_result(""));
+    }
+
+    #[test]
     fn accepts_fake_terminal_position_without_best_move_or_pv() {
         let evaluation = finish_evaluation(
             42,
@@ -572,6 +666,51 @@ mod tests {
         assert_eq!(evaluation.mate, Some(0));
         assert_eq!(evaluation.best_move, None);
         assert!(evaluation.pv.is_empty());
+    }
+
+    #[test]
+    fn deterministic_fake_engine_covers_uci_session_and_cancellation() {
+        let (directory, executable) = compile_fake_uci_engine();
+        let path = executable.to_string_lossy().to_string();
+        let identity = validate_path(&path).unwrap();
+        assert_eq!(identity.name, "ChessMate FakeUCI 1");
+        assert_eq!(identity.version, "1");
+
+        let mut session = UciSession::spawn(&executable).unwrap();
+        session.handshake().unwrap();
+        session.configure().unwrap();
+        let active = AtomicBool::new(false);
+        let evaluation = session
+            .analyze_position(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                0,
+                12,
+                &active,
+            )
+            .unwrap()
+            .unwrap();
+        assert_eq!(evaluation.score_cp, Some(42));
+        assert_eq!(evaluation.best_move.as_deref(), Some("e2e4"));
+
+        let terminal = session
+            .analyze_position("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", 1, 12, &active)
+            .unwrap()
+            .unwrap();
+        assert_eq!(terminal.mate, Some(0));
+        assert_eq!(terminal.best_move, None);
+
+        let cancelled = AtomicBool::new(true);
+        assert!(session
+            .analyze_position(
+                "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                2,
+                12,
+                &cancelled,
+            )
+            .unwrap()
+            .is_none());
+        session.shutdown();
+        fs::remove_dir_all(directory).unwrap();
     }
 
     #[test]

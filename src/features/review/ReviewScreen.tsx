@@ -16,6 +16,7 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
   const [positionIndex, setPositionIndex] = useState(0);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const lastPositionIndex = game.positions.length - 1;
+  const isCompletedGame = ["1-0", "0-1", "1/2-1/2"].includes(game.result);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -113,12 +114,19 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
               );
             })}
           </div>
-          <EnginePanel
-            game={game}
-            positionIndex={positionIndex}
-            repository={repository}
-            t={t}
-          />
+          {isCompletedGame ? (
+            <EnginePanel
+              game={game}
+              positionIndex={positionIndex}
+              repository={repository}
+              t={t}
+            />
+          ) : (
+            <section className="analysis-unavailable" aria-label={t("localAnalysis")}>
+              <span className="eyebrow">{t("localAnalysis")}</span>
+              <strong>{t("analysisFinishedGamesOnly")}</strong>
+            </section>
+          )}
         </aside>
       </section>
     </main>

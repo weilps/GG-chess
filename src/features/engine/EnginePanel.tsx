@@ -38,6 +38,7 @@ function upsertEvaluation(
 }
 
 function localizedEngineError(code: string): TranslationKey {
+  if (code.includes("unfinished_game")) return "analysisFinishedGamesOnly";
   if (code.includes("not_found")) return "engineErrorMissing";
   if (code.includes("not_uci") || code.includes("not_executable")) return "engineErrorNotUci";
   if (code.includes("exited") || code.includes("start_failed")) return "engineErrorExited";
@@ -181,6 +182,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
       const response = await analyzePositions({
         analysisId,
         enginePath: engine.path,
+        gameResult: game.result,
         depth: profile.depth,
         positions: game.positions,
         positionIndexes,
@@ -198,7 +200,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
       setIsCancelling(false);
       setProgress(null);
     }
-  }, [engine, evaluations, game.fingerprint, game.positions, isAnalyzing, profile.depth, profileId, repository]);
+  }, [engine, evaluations, game.fingerprint, game.positions, game.result, isAnalyzing, profile.depth, profileId, repository]);
 
   const stopAnalysis = useCallback(async () => {
     if (!analysisIdRef.current) return;
