@@ -60,6 +60,24 @@ describe("parsePgnArchive", () => {
     );
   });
 
+  it("classifies variant-only notation before standard move parsing", () => {
+    const crazyhouse = `[Event "Pocket game"]
+[Variant "Crazyhouse"]
+[FEN "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR[P] w KQkq - 0 1"]
+[White "Pocket"]
+[Black "Tester"]
+[Result "*"]
+
+1. P@e4 *`;
+
+    expect(parsePgnArchive(crazyhouse)).toMatchObject({
+      games: [],
+      rejections: [
+        { gameNumber: 1, reason: "unsupportedVariant", detail: "Crazyhouse" },
+      ],
+    });
+  });
+
   it("reports an empty file", () => {
     expect(parsePgnArchive(" \n ").rejections).toEqual([
       { gameNumber: 1, reason: "emptyFile" },

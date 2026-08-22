@@ -61,11 +61,34 @@ function fingerprintFor(canonical: string): string {
   return `game-${hash.toString(16).padStart(16, "0")}-${canonical.length}`;
 }
 
+function readTagBeforeMoveParsing(rawPgn: string, tagName: string): string {
+  const escapedTagName = tagName.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  const tagPattern = new RegExp(
+    `^\\s*\\[${escapedTagName}\\s+"((?:\\\\.|[^"\\\\])*)"\\]\\s*$`,
+    "im",
+  );
+  const value = rawPgn.match(tagPattern)?.[1] ?? "";
+  return value.replace(/\\"/g, '"').replace(/\\\\/g, "\\").trim();
+}
+
 function parseCandidate(
   rawPgn: string,
   gameNumber: number,
 ): { game?: ParsedGame; rejection?: ImportRejection } {
   try {
+    // Variant-only notation may be invalid to the standard parser, so classify
+    // an explicit non-standard variant before asking chess.js to parse moves.
+    const declaredVariant = readTagBeforeMoveParsing(rawPgn, "Variant");
+    if (!STANDARD_VARIANTS.has(declaredVariant.toLowerCase())) {
+      return {
+        rejection: {
+          gameNumber,
+          reason: "unsupportedVariant",
+          detail: declaredVariant,
+        },
+      };
+    }
+
     const chess = new Chess();
     chess.loadPgn(rawPgn, { strict: false });
     const headers = chess.getHeaders();
