@@ -32,4 +32,15 @@ describe("formatEvaluation", () => {
     expect(formatEvaluation({ ...evaluation, mate: 3 })).toBe("M3");
     expect(formatEvaluation({ ...evaluation, mate: -3 })).toBe("-M3");
   });
+
+  it("formats a terminal mate score without requiring a best move", () => {
+    expect(formatEvaluation({
+      positionIndex: 42,
+      scoreCp: null,
+      mate: 0,
+      depth: 0,
+      bestMove: null,
+      pv: [],
+    })).toBe("M0");
+  });
 });

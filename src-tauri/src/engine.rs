@@ -38,7 +38,7 @@ pub struct PositionEvaluation {
     pub score_cp: Option<i32>,
     pub mate: Option<i32>,
     pub depth: u32,
-    pub best_move: String,
+    pub best_move: Option<String>,
     pub pv: Vec<String>,
 }
 
@@ -239,17 +239,12 @@ impl UciSession {
             if let Some(best_move) = line.strip_prefix("bestmove ") {
                 let best_move = best_move.split_whitespace().next().unwrap_or_default();
                 let info = latest.ok_or_else(|| "engine_malformed".to_string())?;
-                if best_move.is_empty() || best_move == "(none)" {
-                    return Err("engine_malformed".to_string());
-                }
-                return Ok(Some(PositionEvaluation {
+                return Ok(Some(finish_evaluation(
                     position_index,
-                    score_cp: info.score_cp.map(|score| score * white_multiplier),
-                    mate: info.mate.map(|mate| mate * white_multiplier),
-                    depth: info.depth,
-                    best_move: best_move.to_string(),
-                    pv: info.pv,
-                }));
+                    white_multiplier,
+                    info,
+                    best_move,
+                )?));
             }
         }
     }
@@ -344,6 +339,26 @@ fn white_perspective_multiplier(fen: &str) -> Result<i32, String> {
         Some("b") => Ok(-1),
         _ => Err("engine_malformed_position".to_string()),
     }
+}
+
+fn finish_evaluation(
+    position_index: usize,
+    white_multiplier: i32,
+    info: ParsedInfo,
+    best_move: &str,
+) -> Result<PositionEvaluation, String> {
+    if best_move.is_empty() {
+        return Err("engine_malformed".to_string());
+    }
+    let terminal = best_move == "(none)";
+    Ok(PositionEvaluation {
+        position_index,
+        score_cp: info.score_cp.map(|score| score * white_multiplier),
+        mate: info.mate.map(|mate| mate * white_multiplier),
+        depth: info.depth,
+        best_move: (!terminal).then(|| best_move.to_string()),
+        pv: if terminal { Vec::new() } else { info.pv },
+    })
 }
 
 fn en_croissant_candidates() -> Vec<PathBuf> {
@@ -540,6 +555,26 @@ mod tests {
     }
 
     #[test]
+    fn accepts_fake_terminal_position_without_best_move_or_pv() {
+        let evaluation = finish_evaluation(
+            42,
+            -1,
+            ParsedInfo {
+                depth: 0,
+                score_cp: None,
+                mate: Some(0),
+                pv: Vec::new(),
+            },
+            "(none)",
+        )
+        .unwrap();
+        assert_eq!(evaluation.position_index, 42);
+        assert_eq!(evaluation.mate, Some(0));
+        assert_eq!(evaluation.best_move, None);
+        assert!(evaluation.pv.is_empty());
+    }
+
+    #[test]
     #[ignore = "requires CHESSMATE_STOCKFISH to point to a local engine"]
     fn real_stockfish_smoke_analyzes_a_position() {
         let path = std::env::var("CHESSMATE_STOCKFISH").expect("CHESSMATE_STOCKFISH is required");
@@ -561,8 +596,21 @@ mod tests {
             .expect("analysis should complete");
         assert_eq!(evaluation.position_index, 0);
         assert!(evaluation.depth >= 8);
-        assert!(!evaluation.best_move.is_empty());
+        assert!(evaluation.best_move.is_some());
         assert!(!evaluation.pv.is_empty());
+
+        let terminal = session
+            .analyze_position(
+                "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
+                1,
+                8,
+                &AtomicBool::new(false),
+            )
+            .unwrap()
+            .expect("terminal analysis should complete");
+        assert_eq!(terminal.mate, Some(0));
+        assert_eq!(terminal.best_move, None);
+        assert!(terminal.pv.is_empty());
         session.shutdown();
     }
 }

@@ -248,7 +248,9 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
         <strong>{formatEvaluation(currentEvaluation)}</strong>
         <small>
           {currentEvaluation
-            ? `${t("depth", { count: currentEvaluation.depth })} · ${t("bestMove")}: ${currentEvaluation.bestMove}`
+            ? currentEvaluation.bestMove
+              ? `${t("depth", { count: currentEvaluation.depth })} · ${t("bestMove")}: ${currentEvaluation.bestMove}`
+              : `${t("depth", { count: currentEvaluation.depth })} · ${t("terminalPosition")}`
             : t("positionNotAnalyzed")}
         </small>
         {currentEvaluation?.pv.length ? (

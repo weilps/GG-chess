@@ -58,7 +58,7 @@ export interface PositionEvaluation {
   scoreCp: number | null;
   mate: number | null;
   depth: number;
-  bestMove: string;
+  bestMove: string | null;
   pv: string[];
 }
 

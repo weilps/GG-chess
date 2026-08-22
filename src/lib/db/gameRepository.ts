@@ -332,7 +332,7 @@ export class SqliteGameRepository implements GameRepository {
       scoreCp: row.score_cp,
       mate: row.mate,
       depth: row.depth,
-      bestMove: row.best_move,
+      bestMove: row.best_move || null,
       pv: JSON.parse(row.pv_json) as string[],
       analyzedAt: row.analyzed_at,
     }));
@@ -365,7 +365,7 @@ export class SqliteGameRepository implements GameRepository {
           evaluation.scoreCp,
           evaluation.mate,
           evaluation.depth,
-          evaluation.bestMove,
+          evaluation.bestMove ?? "",
           JSON.stringify(evaluation.pv),
           analyzedAt,
         ],
