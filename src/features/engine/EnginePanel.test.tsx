@@ -89,7 +89,9 @@ describe("EnginePanel", () => {
 
     render(<EnginePanel game={game} positionIndex={0} repository={repository} t={t} />);
     await screen.findByText(/Stockfish 18/);
-    fireEvent.click(screen.getByRole("button", { name: "Analyze" }));
+    const analyzeButton = screen.getByRole("button", { name: "Analyze" });
+    await waitFor(() => expect(analyzeButton).toBeEnabled());
+    fireEvent.click(analyzeButton);
     await waitFor(() => expect(progressHandler).toBeDefined());
     const analysisId = mocks.analyzePositions.mock.calls[0][0].analysisId as string;
     act(() => progressHandler?.({ analysisId, current: 1, total: 2, evaluation }));
@@ -101,5 +103,39 @@ describe("EnginePanel", () => {
     await act(async () => finish?.({ evaluations: [evaluation], cancelled: true }));
     expect(await screen.findByText(/Partial results were saved/)).toBeInTheDocument();
     expect(await repository.getAnalysis(game.fingerprint, engine, "balanced")).toHaveLength(1);
+  });
+
+  it("hides the previous cache and disables analysis while a new profile loads", async () => {
+    const repository = new MemoryGameRepository();
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", [{
+      positionIndex: 0,
+      scoreCp: 35,
+      mate: null,
+      depth: 18,
+      bestMove: "e2e4",
+      pv: ["e2e4"],
+    }]);
+    const originalGetAnalysis = repository.getAnalysis.bind(repository);
+    let finishDeepLoad: ((value: Awaited<ReturnType<typeof repository.getAnalysis>>) => void) | undefined;
+    vi.spyOn(repository, "getAnalysis").mockImplementation((fingerprint, selectedEngine, profile) => {
+      if (profile === "deep") {
+        return new Promise((resolve) => { finishDeepLoad = resolve; });
+      }
+      return originalGetAnalysis(fingerprint, selectedEngine, profile);
+    });
+
+    render(<EnginePanel game={game} positionIndex={0} repository={repository} t={t} />);
+    expect(await screen.findByText("+0.35")).toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("Analysis profile"), { target: { value: "deep" } });
+
+    const analyzeButton = screen.getByRole("button", { name: "Analyze" });
+    expect(analyzeButton).toBeDisabled();
+    expect(screen.queryByText("+0.35")).not.toBeInTheDocument();
+    expect(screen.getByText(/Loading the analysis cache/)).toBeInTheDocument();
+    fireEvent.click(analyzeButton);
+    expect(mocks.analyzePositions).not.toHaveBeenCalled();
+
+    await act(async () => finishDeepLoad?.([]));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Analyze" })).toBeEnabled());
   });
 });

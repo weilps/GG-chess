@@ -29,6 +29,12 @@ interface EnginePanelProps {
 
 type EngineStatus = "loading" | "ready" | "missing" | "error";
 
+interface EvaluationCacheState {
+  key: string | null;
+  values: PositionEvaluation[];
+  loading: boolean;
+}
+
 function upsertEvaluation(
   evaluations: PositionEvaluation[],
   evaluation: PositionEvaluation,
@@ -51,7 +57,11 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("loading");
   const [profileId, setProfileId] = useState<AnalysisProfileId>("balanced");
-  const [evaluations, setEvaluations] = useState<PositionEvaluation[]>([]);
+  const [evaluationCache, setEvaluationCache] = useState<EvaluationCacheState>({
+    key: null,
+    values: [],
+    loading: true,
+  });
   const [progress, setProgress] = useState<{ current: number; total: number } | null>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [isCancelling, setIsCancelling] = useState(false);
@@ -59,6 +69,15 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
   const analysisIdRef = useRef<string | null>(null);
 
   const profile = ANALYSIS_PROFILES.find((item) => item.id === profileId) ?? ANALYSIS_PROFILES[1];
+  const activeCacheKey = engine
+    ? [game.fingerprint, engine.name, engine.version, profileId].join("\u0000")
+    : null;
+  const evaluations = useMemo(
+    () => evaluationCache.key === activeCacheKey ? evaluationCache.values : [],
+    [activeCacheKey, evaluationCache],
+  );
+  const isCacheLoading = activeCacheKey !== null
+    && (evaluationCache.key !== activeCacheKey || evaluationCache.loading);
   const currentEvaluation = evaluations.find((item) => item.positionIndex === positionIndex);
   const complete = evaluations.length === game.positions.length;
 
@@ -115,13 +134,18 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
     }
     repository.getAnalysis(game.fingerprint, engine, profileId)
       .then((stored) => {
-        if (active) setEvaluations(stored);
+        if (active) {
+          setEvaluationCache({ key: activeCacheKey, values: stored, loading: false });
+        }
       })
       .catch(() => {
-        if (active) setErrorKey("engineErrorCache");
+        if (active) {
+          setEvaluationCache({ key: activeCacheKey, values: [], loading: false });
+          setErrorKey("engineErrorCache");
+        }
       });
     return () => { active = false; };
-  }, [engine, game.fingerprint, profileId, repository]);
+  }, [activeCacheKey, engine, game.fingerprint, profileId, repository]);
 
   const chooseEngine = useCallback(async () => {
     setErrorKey(null);
@@ -144,7 +168,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
   }, [repository]);
 
   const runAnalysis = useCallback(async (replace: boolean) => {
-    if (!engine || isAnalyzing) return;
+    if (!engine || !activeCacheKey || isAnalyzing || isCacheLoading) return;
     setErrorKey(null);
     setIsAnalyzing(true);
     setIsCancelling(false);
@@ -152,7 +176,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
     if (replace) {
       await repository.clearAnalysis(game.fingerprint, engine, profileId);
       baseline = [];
-      setEvaluations([]);
+      setEvaluationCache({ key: activeCacheKey, values: [], loading: false });
     }
     const present = new Set(baseline.map((evaluation) => evaluation.positionIndex));
     const positionIndexes = game.positions
@@ -171,7 +195,9 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
       unsubscribe = await subscribeToAnalysisProgress((update) => {
         if (update.analysisId !== analysisId) return;
         setProgress({ current: update.current, total: update.total });
-        setEvaluations((current) => upsertEvaluation(current, update.evaluation));
+        setEvaluationCache((current) => current.key === activeCacheKey
+          ? { ...current, values: upsertEvaluation(current.values, update.evaluation) }
+          : current);
         void repository.saveEvaluations(
           game.fingerprint,
           engine,
@@ -189,7 +215,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
       });
       await repository.saveEvaluations(game.fingerprint, engine, profileId, response.evaluations);
       const stored = await repository.getAnalysis(game.fingerprint, engine, profileId);
-      setEvaluations(stored);
+      setEvaluationCache({ key: activeCacheKey, values: stored, loading: false });
       if (response.cancelled) setErrorKey("engineAnalysisCancelled");
     } catch (error) {
       setErrorKey(localizedEngineError(engineErrorCode(error)));
@@ -200,7 +226,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
       setIsCancelling(false);
       setProgress(null);
     }
-  }, [engine, evaluations, game.fingerprint, game.positions, game.result, isAnalyzing, profile.depth, profileId, repository]);
+  }, [activeCacheKey, engine, evaluations, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, profile.depth, profileId, repository]);
 
   const stopAnalysis = useCallback(async () => {
     if (!analysisIdRef.current) return;
@@ -273,6 +299,9 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
 
       {errorKey && <p className="engine-error" role="alert">{t(errorKey)}</p>}
       {engineStatus === "loading" && <p className="analysis-cache-status">{t("detectingEngine")}</p>}
+      {engineStatus === "ready" && isCacheLoading ? (
+        <p className="analysis-cache-status">{t("loadingAnalysisCache")}</p>
+      ) : null}
 
       <div className="engine-actions">
         {isAnalyzing ? (
@@ -283,7 +312,7 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
           <button
             className="primary-button"
             onClick={() => void runAnalysis(complete)}
-            disabled={!engine || engineStatus !== "ready"}
+            disabled={!engine || engineStatus !== "ready" || isCacheLoading}
             title={!engine ? t("engineRequired") : undefined}
           >
             {actionLabel}
