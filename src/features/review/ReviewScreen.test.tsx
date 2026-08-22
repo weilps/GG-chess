@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
+import { MemoryGameRepository } from "../../lib/db/gameRepository";
 import type { StoredGame } from "../../types";
 import { ReviewScreen } from "./ReviewScreen";
 
@@ -24,12 +25,13 @@ const game: StoredGame = {
   positions: ["start", "after-e4", "after-e5", "after-nf3"],
   importedAt: "2026-08-21T00:00:00Z",
 };
+const repository = new MemoryGameRepository();
 
 describe("ReviewScreen", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("navigates with arrow keys and move buttons", () => {
-    render(<ReviewScreen game={game} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+    render(<ReviewScreen game={game} repository={repository} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent("start");
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
@@ -39,7 +41,7 @@ describe("ReviewScreen", () => {
   });
 
   it("flips the board", () => {
-    render(<ReviewScreen game={game} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+    render(<ReviewScreen game={game} repository={repository} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
     fireEvent.click(screen.getByText(/flip board/i));
     expect(screen.getByTestId("board-orientation")).toHaveAttribute("data-orientation", "black");
   });

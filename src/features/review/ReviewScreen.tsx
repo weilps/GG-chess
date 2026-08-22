@@ -1,15 +1,18 @@
 import { useEffect, useMemo, useState } from "react";
 import { Chessboard } from "react-chessboard";
 import type { TranslationKey } from "../../i18n/translations";
+import type { GameRepository } from "../../lib/db/gameRepository";
 import type { StoredGame } from "../../types";
+import { EnginePanel } from "../engine/EnginePanel";
 
 interface ReviewScreenProps {
   game: StoredGame;
+  repository: GameRepository;
   onBack: () => void;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
 }
 
-export function ReviewScreen({ game, onBack, t }: ReviewScreenProps) {
+export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps) {
   const [positionIndex, setPositionIndex] = useState(0);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const lastPositionIndex = game.positions.length - 1;
@@ -110,6 +113,12 @@ export function ReviewScreen({ game, onBack, t }: ReviewScreenProps) {
               );
             })}
           </div>
+          <EnginePanel
+            game={game}
+            positionIndex={positionIndex}
+            repository={repository}
+            t={t}
+          />
         </aside>
       </section>
     </main>

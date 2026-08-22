@@ -77,7 +77,7 @@ export default function App() {
       {isLoading ? (
         <main className="loading-screen"><div className="loading-piece">♞</div><span>{t("appName")}</span></main>
       ) : selectedGame ? (
-        <ReviewScreen game={selectedGame} onBack={() => setSelectedGame(null)} t={t} />
+        <ReviewScreen game={selectedGame} repository={repository} onBack={() => setSelectedGame(null)} t={t} />
       ) : (
         <LibraryScreen games={games} isImporting={isImporting} onImport={handleImport} onOpenGame={setSelectedGame} t={t} />
       )}

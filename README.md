@@ -20,12 +20,19 @@ npm run lint
 npm run typecheck
 npm test
 npm run build
+cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri build -- --debug --no-bundle
 ```
 
 ## Scope
 
-This release intentionally contains no engine analysis, move ratings, coach, Chess.com integration, variants, live play, cloud accounts or telemetry. Those belong in later Finn-loop tickets. Never use future engine assistance during an active competitive game.
+This release includes local analysis of imported, completed games with an existing Windows UCI engine. It intentionally contains no move ratings, coach, Chess.com integration, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
+
+## Local Stockfish analysis
+
+ChessMate first checks the standard En Croissant Stockfish folder. If no valid engine is found, choose a local `.exe` from the review screen. The executable is validated with `uciok` and `readyok`; its path and the Quick (depth 12), Balanced (depth 18), or Deep (depth 22) profile are stored only in ChessMate's local database.
+
+Stockfish is not downloaded or bundled by ChessMate. Games and positions never leave the computer during analysis.
 
 ## Inspiration
 
@@ -33,4 +40,4 @@ ChessMate is a new independent project inspired in part by [En Croissant](https:
 
 ## Status
 
-GUI-5 foundation slice, built through the Finn `spec → build → review` loop.
+GUI-6 local-analysis slice, built through the Finn `spec → build → review` loop.
