@@ -26,5 +26,7 @@ jobs:
       - run: npm run build
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Test Rust engine layer
+        run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Verify Tauri and Rust
         run: npm run tauri build -- --debug --no-bundle

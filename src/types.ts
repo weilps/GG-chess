@@ -39,3 +39,33 @@ export interface ImportSummary {
   duplicates: number;
   rejections: ImportRejection[];
 }
+
+export type AnalysisProfileId = "quick" | "balanced" | "deep";
+
+export interface AnalysisProfile {
+  id: AnalysisProfileId;
+  depth: number;
+}
+
+export interface EngineInfo {
+  path: string;
+  name: string;
+  version: string;
+}
+
+export interface PositionEvaluation {
+  positionIndex: number;
+  scoreCp: number | null;
+  mate: number | null;
+  depth: number;
+  bestMove: string | null;
+  pv: string[];
+}
+
+export interface StoredPositionEvaluation extends PositionEvaluation {
+  gameFingerprint: string;
+  engineName: string;
+  engineVersion: string;
+  profile: AnalysisProfileId;
+  analyzedAt: string;
+}

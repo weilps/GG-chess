@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { ParsedGame, StoredGame } from "../../types";
+import type { EngineInfo, ParsedGame, StoredGame } from "../../types";
 import {
   MemoryGameRepository,
   sortGamesNewestFirst,
@@ -38,6 +38,29 @@ describe("MemoryGameRepository", () => {
     });
     expect(await repository.listGames()).toHaveLength(1);
     vi.useRealTimers();
+  });
+
+  it("persists settings and isolates analysis caches by engine and profile", async () => {
+    const repository = new MemoryGameRepository();
+    const engine: EngineInfo = { path: "stockfish.exe", name: "Stockfish 18", version: "18" };
+    await repository.setSetting("analysisProfile", "deep");
+    await repository.saveEvaluations("one", engine, "balanced", [{
+      positionIndex: 0,
+      scoreCp: 35,
+      mate: null,
+      depth: 18,
+      bestMove: "e2e4",
+      pv: ["e2e4", "e7e5"],
+    }]);
+
+    expect(await repository.getSetting("analysisProfile")).toBe("deep");
+    expect(await repository.getAnalysis("one", engine, "balanced")).toMatchObject([
+      { positionIndex: 0, scoreCp: 35, profile: "balanced" },
+    ]);
+    expect(await repository.getAnalysis("one", engine, "deep")).toEqual([]);
+
+    await repository.clearAnalysis("one", engine, "balanced");
+    expect(await repository.getAnalysis("one", engine, "balanced")).toEqual([]);
   });
 });
 
