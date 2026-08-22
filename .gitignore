@@ -2,6 +2,7 @@
 node_modules/
 dist/
 target/
+src-tauri/target/
 
 # Local configuration and secrets
 .env
@@ -18,3 +19,4 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+*.tsbuildinfo
