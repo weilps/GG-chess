@@ -109,7 +109,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .rating-blunder { background: #a63e3e; }
 .rating-notRated { color: #7e8781; background: #e5e8e2; }
 .selected-move-summary .selected-rating { margin-top: 0; }
-.evaluation-chart-card, .coach-panel, .game-review-summary { margin-top: 18px; border: 1px solid #d7dbd3; border-radius: 14px; background: rgba(251, 252, 248, .94); box-shadow: 0 12px 30px rgba(39, 56, 46, .07); }
+.evaluation-chart-card, .coach-panel, .codex-adviser, .game-review-summary { margin-top: 18px; border: 1px solid #d7dbd3; border-radius: 14px; background: rgba(251, 252, 248, .94); box-shadow: 0 12px 30px rgba(39, 56, 46, .07); }
 .evaluation-chart-card { padding: 16px 18px 12px; }
 .game-review-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .game-review-heading > div { display: flex; flex-direction: column; gap: 3px; }
@@ -161,6 +161,29 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .coach-tip p { color: #765b27; }
 .coach-empty { margin: 0; padding: 18px; color: #89918b; font-size: 12px; }
 .coach-disclaimer { display: block; padding: 10px 18px; border-top: 1px solid #e3e6df; color: #89918b; background: #fafbf7; font-size: 9px; }
+.codex-adviser { overflow: hidden; }
+.codex-adviser-heading { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 15px 18px; border-bottom: 1px solid #ddd8c9; background: #f7f3e7; }
+.codex-adviser-heading > div { display: flex; flex-direction: column; gap: 3px; }
+.codex-adviser-heading strong { color: #4b4335; font-family: Georgia, serif; font-size: 16px; }
+.codex-adviser-heading .text-button { padding: 3px 0; font-size: 11px; }
+.codex-adviser-empty, .codex-ready { margin: 0; padding: 18px; color: #7f7a70; font-size: 12px; }
+.codex-ready p { margin: 0 0 12px; }
+.codex-ready .primary-button, .codex-answer .secondary-button, .codex-consent .primary-button, .codex-consent .secondary-button { padding: 9px 13px; font-size: 11px; }
+.codex-consent { padding: 18px; color: #5d574d; }
+.codex-consent > strong { color: #443d31; font-family: Georgia, serif; font-size: 16px; }
+.codex-consent p { margin: 8px 0; font-size: 12px; line-height: 1.5; }
+.codex-consent small { display: block; color: #837d72; font-size: 10px; line-height: 1.45; }
+.codex-consent > div { display: flex; gap: 8px; margin-top: 14px; }
+.codex-answer { display: grid; grid-template-columns: 1fr 1fr; }
+.codex-answer section { padding: 15px 18px; border-right: 1px solid #e4e0d4; border-bottom: 1px solid #e4e0d4; }
+.codex-answer section:nth-child(even) { border-right: 0; }
+.codex-answer h3 { margin: 0 0 6px; color: #9a7b3a; font-size: 10px; letter-spacing: .07em; text-transform: uppercase; }
+.codex-answer p { margin: 0; color: #536159; font-size: 12px; line-height: 1.5; white-space: pre-wrap; }
+.codex-answer-meta { grid-column: 1 / 3; display: flex; flex-wrap: wrap; gap: 6px; padding: 10px 18px; color: #7f7a70; font-size: 9px; }
+.codex-answer-meta span { padding: 4px 7px; border-radius: 6px; background: #f0ede4; }
+.codex-answer > .secondary-button { grid-column: 1 / 3; justify-self: start; margin: 0 18px 14px; }
+.codex-error { color: #983f34 !important; }
+.codex-bridge-note { display: block; padding: 9px 18px; border-top: 1px solid #e4e0d4; color: #938d83; background: #fbfaf6; font-size: 9px; }
 .game-review-summary { display: grid; grid-template-columns: minmax(180px, .72fr) minmax(0, 1.28fr); overflow: hidden; }
 .summary-accuracy { padding: 16px; border-right: 1px solid #dde1da; background: #f8f9f4; }
 .classification-breakdown { padding: 16px; }
@@ -230,6 +253,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
   .coach-content { grid-template-columns: 1fr; }
   .coach-verdict { border-right: 0; border-bottom: 1px solid #dde1da; }
   .coach-tip { grid-column: 1; }
+  .codex-answer { grid-template-columns: 1fr; }
+  .codex-answer section { border-right: 0; }
+  .codex-answer-meta, .codex-answer > .secondary-button { grid-column: 1; }
   .summary-accuracy { border-right: 0; border-bottom: 1px solid #dde1da; }
   .critical-moments { grid-column: 1; }
   .game-row { grid-template-columns: 1fr 1fr 65px 100px 35px; }

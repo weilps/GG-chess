@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Chessboard } from "react-chessboard";
 import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
-import type { AnalysisSnapshot, StoredGame } from "../../types";
+import type { AnalysisSnapshot, Language, StoredGame } from "../../types";
+import { buildCodexAdviceRequest } from "../adviser/codexClient";
+import { CodexAdvisorPanel } from "../adviser/CodexAdvisorPanel";
 import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
 import { MoveRatingBadge, MoveRatingDetail } from "../classification/MoveRatings";
 import { CoachPanel } from "../coach/CoachPanel";
@@ -15,11 +17,12 @@ import { GameReviewSummary } from "./GameReviewSummary";
 interface ReviewScreenProps {
   game: StoredGame;
   repository: GameRepository;
+  language: Language;
   onBack: () => void;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
 }
 
-export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps) {
+export function ReviewScreen({ game, repository, language, onBack, t }: ReviewScreenProps) {
   const [positionIndex, setPositionIndex] = useState(0);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot>({
@@ -73,6 +76,10 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
       ? buildCoachInsight(game, selectedRating, activeEvaluations)
       : null,
     [activeEvaluations, game, isCompletedGame, selectedRating],
+  );
+  const codexRequest = useMemo(
+    () => buildCodexAdviceRequest(game, coachInsight, language),
+    [coachInsight, game, language],
   );
   const selectedEvaluation = activeEvaluations.find(
     (evaluation) => evaluation.positionIndex === positionIndex,
@@ -139,6 +146,12 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
           <CoachPanel
             insight={coachInsight}
             unavailable={!isCompletedGame}
+            t={t}
+          />
+          <CodexAdvisorPanel
+            key={`${analysisSnapshot.cacheKey ?? "no-cache"}:${codexRequest ? JSON.stringify(codexRequest) : "unavailable"}`}
+            request={codexRequest}
+            repository={repository}
             t={t}
           />
           <GameReviewSummary

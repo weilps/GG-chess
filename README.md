@@ -26,7 +26,7 @@ npm run tauri build -- --debug --no-bundle
 
 ## Scope
 
-This release includes local analysis, ChessMate move ratings, an interactive Game Review, and deterministic local coaching for imported, completed games with an existing Windows UCI engine. It intentionally contains no AI coach, Chess.com integration, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
+This release includes local analysis, ChessMate move ratings, an interactive Game Review, deterministic local coaching, and an optional Codex adviser for imported, completed games. It intentionally contains no Chess.com integration, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
 
 ## Local Stockfish analysis
 
@@ -54,10 +54,16 @@ Select any move to see the classification reason, evaluation before and after fr
 
 Tips use a transparent fixed priority: found or missed mate, checking best line, capturing best line, forcing-move safety for errors, candidate comparison for small losses, then process reinforcement. The same saved position always produces the same insight; this coach uses no model, network request, or official Chess.com explanation.
 
+## Optional Codex adviser
+
+The Windows app can turn the deterministic move facts into a personalized explanation by invoking the installed Codex CLI through a native, read-only Tauri bridge. Every request is manual and requires remembered first-use consent. Only the selected move's FENs, SAN, rating, mover-perspective values, best move, and saved principal variation are sent; player names, raw PGN, Chess.com identifiers, local paths, and secrets are excluded. Responses are never persisted.
+
+This is an unofficial local workaround using the existing ChatGPT/Codex login and subscription quota, not an OpenAI API integration. It needs no separate API key or API billing, but it has no API SLA and remains subject to subscription availability and quota. ChessMate pins `gpt-5.6-terra` with `medium` reasoning, runs it ephemerally in an empty workspace with a read-only sandbox, permits one request at a time, and stops waiting after three minutes. The deterministic coach remains available when Codex is missing, logged out, busy, or unavailable.
+
 ## Inspiration
 
 ChessMate is a new independent project inspired in part by [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant). No En Croissant code is included. En Croissant is licensed under GPL-3.0.
 
 ## Status
 
-GUI-9 deterministic local coach slice, built through the Finn `spec → build → review` loop.
+GUI-10 optional local Codex adviser slice, built through the Finn `spec → build → review` loop.
