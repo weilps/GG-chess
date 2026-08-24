@@ -46,6 +46,16 @@ describe("ReviewScreen", () => {
     expect(screen.getByTestId("board-orientation")).toHaveAttribute("data-orientation", "black");
   });
 
+  it("keeps unrated moves explicit until adjacent evaluations are available", () => {
+    render(<ReviewScreen game={game} repository={repository} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+
+    expect(screen.getAllByLabelText("Not rated")).toHaveLength(game.moves.length);
+    expect(screen.getAllByText("—", { selector: ".accuracy-sides strong" })).toHaveLength(2);
+    fireEvent.click(screen.getByText("e4"));
+    expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Not rated");
+    expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Analyze both adjacent positions to rate this move.");
+  });
+
   it("does not offer engine analysis for a Result * game", () => {
     render(
       <ReviewScreen

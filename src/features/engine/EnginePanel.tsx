@@ -3,6 +3,7 @@ import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
 import type {
   AnalysisProfileId,
+  AnalysisSnapshot,
   EngineInfo,
   PositionEvaluation,
   StoredGame,
@@ -25,6 +26,7 @@ interface EnginePanelProps {
   positionIndex: number;
   repository: GameRepository;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
+  onAnalysisStateChange?: (snapshot: AnalysisSnapshot) => void;
 }
 
 type EngineStatus = "loading" | "ready" | "missing" | "error";
@@ -53,7 +55,13 @@ function localizedEngineError(code: string): TranslationKey {
   return "engineErrorUnknown";
 }
 
-export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelProps) {
+export function EnginePanel({
+  game,
+  positionIndex,
+  repository,
+  t,
+  onAnalysisStateChange,
+}: EnginePanelProps) {
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("loading");
   const [profileId, setProfileId] = useState<AnalysisProfileId>("balanced");
@@ -80,6 +88,15 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
     && (evaluationCache.key !== activeCacheKey || evaluationCache.loading);
   const currentEvaluation = evaluations.find((item) => item.positionIndex === positionIndex);
   const complete = evaluations.length === game.positions.length;
+
+  useEffect(() => {
+    onAnalysisStateChange?.({
+      cacheKey: activeCacheKey,
+      evaluations,
+      loading: isCacheLoading,
+      profile: profileId,
+    });
+  }, [activeCacheKey, evaluations, isCacheLoading, onAnalysisStateChange, profileId]);
 
   useEffect(() => {
     let active = true;
@@ -154,18 +171,30 @@ export function EnginePanel({ game, positionIndex, repository, t }: EnginePanelP
       if (!path) return;
       const selected = await validateEngine(path);
       await repository.setSetting("enginePath", selected.path);
+      onAnalysisStateChange?.({
+        cacheKey: null,
+        evaluations: [],
+        loading: true,
+        profile: profileId,
+      });
       setEngine(selected);
       setEngineStatus("ready");
     } catch (error) {
       setEngineStatus("error");
       setErrorKey(localizedEngineError(engineErrorCode(error)));
     }
-  }, [repository]);
+  }, [onAnalysisStateChange, profileId, repository]);
 
   const changeProfile = useCallback(async (next: AnalysisProfileId) => {
+    onAnalysisStateChange?.({
+      cacheKey: null,
+      evaluations: [],
+      loading: true,
+      profile: next,
+    });
     setProfileId(next);
     await repository.setSetting("analysisProfile", next);
-  }, [repository]);
+  }, [onAnalysisStateChange, repository]);
 
   const runAnalysis = useCallback(async (replace: boolean) => {
     if (!engine || !activeCacheKey || isAnalyzing || isCacheLoading) return;
