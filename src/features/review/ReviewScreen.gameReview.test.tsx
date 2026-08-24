@@ -4,11 +4,20 @@ import { describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
 import { MemoryGameRepository } from "../../lib/db/gameRepository";
 import type { AnalysisSnapshot, StoredGame } from "../../types";
+import type { CodexAdviceRequest } from "../adviser/codexClient";
 import { ReviewScreen } from "./ReviewScreen";
 
 vi.mock("react-chessboard", () => ({
   Chessboard: ({ options }: { options: { position: string } }) => (
     <div data-testid="chessboard-position">{options.position}</div>
+  ),
+}));
+
+vi.mock("../adviser/CodexAdvisorPanel", () => ({
+  CodexAdvisorPanel: ({ request }: { request: CodexAdviceRequest | null }) => (
+    <div data-testid="codex-adviser-request">
+      {request ? `${request.san}:${request.classification}` : "unavailable"}
+    </div>
   ),
 }));
 
@@ -73,6 +82,7 @@ describe("ReviewScreen Game Review integration", () => {
       <ReviewScreen
         game={game}
         repository={new MemoryGameRepository()}
+        language="en"
         onBack={vi.fn()}
         t={(key, variables) => translate("en", key, variables)}
       />,
@@ -92,6 +102,7 @@ describe("ReviewScreen Game Review integration", () => {
     expect(coach).toHaveTextContent("Inaccuracy");
     expect(coach).toHaveTextContent("Played e5");
     expect(coach).toHaveTextContent("c5 Nf3");
+    expect(screen.getByTestId("codex-adviser-request")).toHaveTextContent("e5:inaccuracy");
 
     fireEvent.click(screen.getByRole("button", { name: "Switch profile fixture" }));
     await waitFor(() => expect(screen.getByText("Analyze positions to reveal the course of the game.")).toBeInTheDocument());
@@ -101,5 +112,6 @@ describe("ReviewScreen Game Review integration", () => {
     expect(coach).toHaveTextContent("Not rated");
     expect(coach).toHaveTextContent("Analyze both adjacent positions");
     expect(coach).not.toHaveTextContent("c5 Nf3");
+    expect(screen.getByTestId("codex-adviser-request")).toHaveTextContent("unavailable");
   });
 });

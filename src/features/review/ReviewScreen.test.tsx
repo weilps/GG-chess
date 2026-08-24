@@ -31,7 +31,7 @@ describe("ReviewScreen", () => {
   beforeEach(() => vi.clearAllMocks());
 
   it("navigates with arrow keys and move buttons", () => {
-    render(<ReviewScreen game={game} repository={repository} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+    render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent("start");
 
     fireEvent.keyDown(window, { key: "ArrowRight" });
@@ -41,13 +41,13 @@ describe("ReviewScreen", () => {
   });
 
   it("flips the board", () => {
-    render(<ReviewScreen game={game} repository={repository} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+    render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
     fireEvent.click(screen.getByText(/flip board/i));
     expect(screen.getByTestId("board-orientation")).toHaveAttribute("data-orientation", "black");
   });
 
   it("keeps unrated moves explicit until adjacent evaluations are available", () => {
-    render(<ReviewScreen game={game} repository={repository} onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+    render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
 
     expect(screen.getAllByLabelText("Not rated")).toHaveLength(game.moves.length);
     expect(screen.getAllByText("—", { selector: ".accuracy-sides strong" })).toHaveLength(2);
@@ -61,6 +61,7 @@ describe("ReviewScreen", () => {
       <ReviewScreen
         game={{ ...game, result: "*" }}
         repository={repository}
+        language="en"
         onBack={vi.fn()}
         t={(key, variables) => translate("en", key, variables)}
       />,
