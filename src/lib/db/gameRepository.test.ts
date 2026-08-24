@@ -62,6 +62,43 @@ describe("MemoryGameRepository", () => {
     await repository.clearAnalysis("one", engine, "balanced");
     expect(await repository.getAnalysis("one", engine, "balanced")).toEqual([]);
   });
+
+  it("persists monthly Chess.com sync markers per normalized username", async () => {
+    const repository = new MemoryGameRepository();
+    await repository.saveChessComSyncState({
+      username: "ada",
+      yearMonth: "2026-07",
+      etag: "first",
+      lastModified: null,
+      completedAt: "2026-08-01T00:00:00Z",
+      checkedAt: "2026-08-01T00:00:00Z",
+    });
+    await repository.saveChessComSyncState({
+      username: "grace",
+      yearMonth: "2026-07",
+      etag: "other",
+      lastModified: null,
+      completedAt: null,
+      checkedAt: "2026-08-01T00:00:00Z",
+    });
+    await repository.saveChessComSyncState({
+      username: "ada",
+      yearMonth: "2026-07",
+      etag: "updated",
+      lastModified: "Fri, 21 Aug 2026 00:00:00 GMT",
+      completedAt: "2026-08-21T00:00:00Z",
+      checkedAt: "2026-08-21T00:00:00Z",
+    });
+
+    expect(await repository.listChessComSyncStates("ada")).toEqual([{
+      username: "ada",
+      yearMonth: "2026-07",
+      etag: "updated",
+      lastModified: "Fri, 21 Aug 2026 00:00:00 GMT",
+      completedAt: "2026-08-21T00:00:00Z",
+      checkedAt: "2026-08-21T00:00:00Z",
+    }]);
+  });
 });
 
 describe("sortGamesNewestFirst", () => {

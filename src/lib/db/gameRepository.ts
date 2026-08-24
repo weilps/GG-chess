@@ -14,12 +14,23 @@ export interface AddGamesResult {
   duplicates: number;
 }
 
+export interface ChessComMonthSyncState {
+  username: string;
+  yearMonth: string;
+  etag: string | null;
+  lastModified: string | null;
+  completedAt: string | null;
+  checkedAt: string;
+}
+
 export interface GameRepository {
   initialize(): Promise<void>;
   listGames(): Promise<StoredGame[]>;
   addGames(games: ParsedGame[]): Promise<AddGamesResult>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+  listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]>;
+  saveChessComSyncState(state: ChessComMonthSyncState): Promise<void>;
   getAnalysis(
     gameFingerprint: string,
     engine: EngineInfo,
@@ -56,6 +67,7 @@ export class MemoryGameRepository implements GameRepository {
   private readonly games = new Map<string, StoredGame>();
   private readonly settings = new Map<string, string>();
   private readonly evaluations = new Map<string, StoredPositionEvaluation>();
+  private readonly chessComSyncStates = new Map<string, ChessComMonthSyncState>();
 
   async initialize(): Promise<void> {
     return Promise.resolve();
@@ -86,6 +98,16 @@ export class MemoryGameRepository implements GameRepository {
 
   async setSetting(key: string, value: string): Promise<void> {
     this.settings.set(key, value);
+  }
+
+  async listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]> {
+    return [...this.chessComSyncStates.values()]
+      .filter((state) => state.username === username)
+      .sort((left, right) => left.yearMonth.localeCompare(right.yearMonth));
+  }
+
+  async saveChessComSyncState(state: ChessComMonthSyncState): Promise<void> {
+    this.chessComSyncStates.set(`${state.username}\u0000${state.yearMonth}`, { ...state });
   }
 
   async getAnalysis(
@@ -182,6 +204,15 @@ interface EvaluationRow {
   analyzed_at: string;
 }
 
+interface ChessComSyncRow {
+  username: string;
+  year_month: string;
+  etag: string | null;
+  last_modified: string | null;
+  completed_at: string | null;
+  checked_at: string;
+}
+
 export class SqliteGameRepository implements GameRepository {
   private database: Database | null = null;
 
@@ -226,6 +257,17 @@ export class SqliteGameRepository implements GameRepository {
           game_fingerprint, engine_name, engine_version, profile, position_index
         ),
         FOREIGN KEY (game_fingerprint) REFERENCES games(fingerprint) ON DELETE CASCADE
+      )
+    `);
+    await this.database.execute(`
+      CREATE TABLE IF NOT EXISTS chess_com_sync_months (
+        username TEXT NOT NULL,
+        year_month TEXT NOT NULL,
+        etag TEXT,
+        last_modified TEXT,
+        completed_at TEXT,
+        checked_at TEXT NOT NULL,
+        PRIMARY KEY (username, year_month)
       )
     `);
   }
@@ -308,6 +350,43 @@ export class SqliteGameRepository implements GameRepository {
       `INSERT INTO app_settings (key, value) VALUES ($1, $2)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [key, value],
+    );
+  }
+
+  async listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]> {
+    const rows = await this.requireDatabase().select<ChessComSyncRow[]>(
+      `SELECT * FROM chess_com_sync_months
+       WHERE username = $1 ORDER BY year_month ASC`,
+      [username],
+    );
+    return rows.map((row) => ({
+      username: row.username,
+      yearMonth: row.year_month,
+      etag: row.etag,
+      lastModified: row.last_modified,
+      completedAt: row.completed_at,
+      checkedAt: row.checked_at,
+    }));
+  }
+
+  async saveChessComSyncState(state: ChessComMonthSyncState): Promise<void> {
+    await this.requireDatabase().execute(
+      `INSERT INTO chess_com_sync_months (
+        username, year_month, etag, last_modified, completed_at, checked_at
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT(username, year_month) DO UPDATE SET
+        etag = excluded.etag,
+        last_modified = excluded.last_modified,
+        completed_at = excluded.completed_at,
+        checked_at = excluded.checked_at`,
+      [
+        state.username,
+        state.yearMonth,
+        state.etag,
+        state.lastModified,
+        state.completedAt,
+        state.checkedAt,
+      ],
     );
   }
 
