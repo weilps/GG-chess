@@ -23,6 +23,36 @@ export interface ChessComMonthSyncState {
   checkedAt: string;
 }
 
+export interface StoredAnalysisCache {
+  gameFingerprint: string;
+  engineName: string;
+  engineVersion: string;
+  profile: AnalysisProfileId;
+  analyzedAt: string;
+  evaluations: StoredPositionEvaluation[];
+}
+
+export type PuzzleResult = "incorrect" | "revealed" | "again" | "good" | "easy";
+
+export interface PuzzleProgress {
+  puzzleKey: string;
+  attempts: number;
+  successes: number;
+  lastResult: PuzzleResult;
+  dueAt: string;
+  updatedAt: string;
+}
+
+export type TrainingActivityKind = "review" | "puzzle" | "opening";
+
+export interface TrainingActivity {
+  weekStart: string;
+  kind: TrainingActivityKind;
+  itemKey: string;
+  occurredOn: string;
+  createdAt: string;
+}
+
 export interface GameRepository {
   initialize(): Promise<void>;
   listGames(): Promise<StoredGame[]>;
@@ -31,6 +61,12 @@ export interface GameRepository {
   setSetting(key: string, value: string): Promise<void>;
   listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]>;
   saveChessComSyncState(state: ChessComMonthSyncState): Promise<void>;
+  listAnalysisCaches(): Promise<StoredAnalysisCache[]>;
+  listPuzzleProgress(): Promise<PuzzleProgress[]>;
+  savePuzzleProgress(progress: PuzzleProgress): Promise<void>;
+  recordTrainingActivity(activity: TrainingActivity): Promise<void>;
+  listTrainingActivities(weekStart: string): Promise<TrainingActivity[]>;
+  listTrainingDays(): Promise<string[]>;
   getAnalysis(
     gameFingerprint: string,
     engine: EngineInfo,
@@ -68,6 +104,9 @@ export class MemoryGameRepository implements GameRepository {
   private readonly settings = new Map<string, string>();
   private readonly evaluations = new Map<string, StoredPositionEvaluation>();
   private readonly chessComSyncStates = new Map<string, ChessComMonthSyncState>();
+  private readonly puzzleProgress = new Map<string, PuzzleProgress>();
+  private readonly trainingActivities = new Map<string, TrainingActivity>();
+  private readonly trainingDays = new Set<string>();
 
   async initialize(): Promise<void> {
     return Promise.resolve();
@@ -108,6 +147,35 @@ export class MemoryGameRepository implements GameRepository {
 
   async saveChessComSyncState(state: ChessComMonthSyncState): Promise<void> {
     this.chessComSyncStates.set(`${state.username}\u0000${state.yearMonth}`, { ...state });
+  }
+
+  async listAnalysisCaches(): Promise<StoredAnalysisCache[]> {
+    return groupAnalysisCaches([...this.evaluations.values()]);
+  }
+
+  async listPuzzleProgress(): Promise<PuzzleProgress[]> {
+    return [...this.puzzleProgress.values()];
+  }
+
+  async savePuzzleProgress(progress: PuzzleProgress): Promise<void> {
+    this.puzzleProgress.set(progress.puzzleKey, { ...progress });
+  }
+
+  async recordTrainingActivity(activity: TrainingActivity): Promise<void> {
+    const key = `${activity.weekStart}\u0000${activity.kind}\u0000${activity.itemKey}`;
+    if (!this.trainingActivities.has(key)) {
+      this.trainingActivities.set(key, { ...activity });
+    }
+    this.trainingDays.add(activity.occurredOn);
+  }
+
+  async listTrainingActivities(weekStart: string): Promise<TrainingActivity[]> {
+    return [...this.trainingActivities.values()]
+      .filter((activity) => activity.weekStart === weekStart);
+  }
+
+  async listTrainingDays(): Promise<string[]> {
+    return [...this.trainingDays].sort();
   }
 
   async getAnalysis(
@@ -213,6 +281,74 @@ interface ChessComSyncRow {
   checked_at: string;
 }
 
+interface PuzzleProgressRow {
+  puzzle_key: string;
+  attempts: number;
+  successes: number;
+  last_result: PuzzleResult;
+  due_at: string;
+  updated_at: string;
+}
+
+interface TrainingActivityRow {
+  week_start: string;
+  kind: TrainingActivityKind;
+  item_key: string;
+  occurred_on: string;
+  created_at: string;
+}
+
+function evaluationFromRow(row: EvaluationRow): StoredPositionEvaluation {
+  return {
+    gameFingerprint: row.game_fingerprint,
+    engineName: row.engine_name,
+    engineVersion: row.engine_version,
+    profile: row.profile,
+    positionIndex: row.position_index,
+    scoreCp: row.score_cp,
+    mate: row.mate,
+    depth: row.depth,
+    bestMove: row.best_move || null,
+    pv: JSON.parse(row.pv_json) as string[],
+    analyzedAt: row.analyzed_at,
+  };
+}
+
+function groupAnalysisCaches(
+  evaluations: StoredPositionEvaluation[],
+): StoredAnalysisCache[] {
+  const groups = new Map<string, StoredAnalysisCache>();
+  for (const evaluation of evaluations) {
+    const key = [
+      evaluation.gameFingerprint,
+      evaluation.engineName,
+      evaluation.engineVersion,
+      evaluation.profile,
+    ].join("\u0000");
+    const group = groups.get(key) ?? {
+      gameFingerprint: evaluation.gameFingerprint,
+      engineName: evaluation.engineName,
+      engineVersion: evaluation.engineVersion,
+      profile: evaluation.profile,
+      analyzedAt: evaluation.analyzedAt,
+      evaluations: [],
+    };
+    group.analyzedAt = group.analyzedAt.localeCompare(evaluation.analyzedAt) >= 0
+      ? group.analyzedAt
+      : evaluation.analyzedAt;
+    group.evaluations.push(evaluation);
+    groups.set(key, group);
+  }
+  return [...groups.values()]
+    .map((group) => ({
+      ...group,
+      evaluations: group.evaluations.sort(
+        (left, right) => left.positionIndex - right.positionIndex,
+      ),
+    }))
+    .sort((left, right) => right.analyzedAt.localeCompare(left.analyzedAt));
+}
+
 export class SqliteGameRepository implements GameRepository {
   private database: Database | null = null;
 
@@ -268,6 +404,31 @@ export class SqliteGameRepository implements GameRepository {
         completed_at TEXT,
         checked_at TEXT NOT NULL,
         PRIMARY KEY (username, year_month)
+      )
+    `);
+    await this.database.execute(`
+      CREATE TABLE IF NOT EXISTS training_puzzle_progress (
+        puzzle_key TEXT PRIMARY KEY NOT NULL,
+        attempts INTEGER NOT NULL,
+        successes INTEGER NOT NULL,
+        last_result TEXT NOT NULL,
+        due_at TEXT NOT NULL,
+        updated_at TEXT NOT NULL
+      )
+    `);
+    await this.database.execute(`
+      CREATE TABLE IF NOT EXISTS training_activities (
+        week_start TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        item_key TEXT NOT NULL,
+        occurred_on TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        PRIMARY KEY (week_start, kind, item_key)
+      )
+    `);
+    await this.database.execute(`
+      CREATE TABLE IF NOT EXISTS training_days (
+        day TEXT PRIMARY KEY NOT NULL
       )
     `);
   }
@@ -390,6 +551,92 @@ export class SqliteGameRepository implements GameRepository {
     );
   }
 
+  async listAnalysisCaches(): Promise<StoredAnalysisCache[]> {
+    const rows = await this.requireDatabase().select<EvaluationRow[]>(`
+      SELECT * FROM position_evaluations
+      ORDER BY game_fingerprint, engine_name, engine_version, profile, position_index
+    `);
+    return groupAnalysisCaches(rows.map(evaluationFromRow));
+  }
+
+  async listPuzzleProgress(): Promise<PuzzleProgress[]> {
+    const rows = await this.requireDatabase().select<PuzzleProgressRow[]>(`
+      SELECT * FROM training_puzzle_progress ORDER BY due_at ASC
+    `);
+    return rows.map((row) => ({
+      puzzleKey: row.puzzle_key,
+      attempts: row.attempts,
+      successes: row.successes,
+      lastResult: row.last_result,
+      dueAt: row.due_at,
+      updatedAt: row.updated_at,
+    }));
+  }
+
+  async savePuzzleProgress(progress: PuzzleProgress): Promise<void> {
+    await this.requireDatabase().execute(
+      `INSERT INTO training_puzzle_progress (
+        puzzle_key, attempts, successes, last_result, due_at, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6)
+      ON CONFLICT(puzzle_key) DO UPDATE SET
+        attempts = excluded.attempts,
+        successes = excluded.successes,
+        last_result = excluded.last_result,
+        due_at = excluded.due_at,
+        updated_at = excluded.updated_at`,
+      [
+        progress.puzzleKey,
+        progress.attempts,
+        progress.successes,
+        progress.lastResult,
+        progress.dueAt,
+        progress.updatedAt,
+      ],
+    );
+  }
+
+  async recordTrainingActivity(activity: TrainingActivity): Promise<void> {
+    const database = this.requireDatabase();
+    await database.execute(
+      `INSERT OR IGNORE INTO training_activities (
+        week_start, kind, item_key, occurred_on, created_at
+      ) VALUES ($1, $2, $3, $4, $5)`,
+      [
+        activity.weekStart,
+        activity.kind,
+        activity.itemKey,
+        activity.occurredOn,
+        activity.createdAt,
+      ],
+    );
+    await database.execute(
+      "INSERT OR IGNORE INTO training_days (day) VALUES ($1)",
+      [activity.occurredOn],
+    );
+  }
+
+  async listTrainingActivities(weekStart: string): Promise<TrainingActivity[]> {
+    const rows = await this.requireDatabase().select<TrainingActivityRow[]>(
+      `SELECT * FROM training_activities
+       WHERE week_start = $1 ORDER BY created_at ASC`,
+      [weekStart],
+    );
+    return rows.map((row) => ({
+      weekStart: row.week_start,
+      kind: row.kind,
+      itemKey: row.item_key,
+      occurredOn: row.occurred_on,
+      createdAt: row.created_at,
+    }));
+  }
+
+  async listTrainingDays(): Promise<string[]> {
+    const rows = await this.requireDatabase().select<Array<{ day: string }>>(
+      "SELECT day FROM training_days ORDER BY day ASC",
+    );
+    return rows.map((row) => row.day);
+  }
+
   async getAnalysis(
     gameFingerprint: string,
     engine: EngineInfo,
@@ -402,19 +649,7 @@ export class SqliteGameRepository implements GameRepository {
        ORDER BY position_index ASC`,
       [gameFingerprint, engine.name, engine.version, profile],
     );
-    return rows.map((row) => ({
-      gameFingerprint: row.game_fingerprint,
-      engineName: row.engine_name,
-      engineVersion: row.engine_version,
-      profile: row.profile,
-      positionIndex: row.position_index,
-      scoreCp: row.score_cp,
-      mate: row.mate,
-      depth: row.depth,
-      bestMove: row.best_move || null,
-      pv: JSON.parse(row.pv_json) as string[],
-      analyzedAt: row.analyzed_at,
-    }));
+    return rows.map(evaluationFromRow);
   }
 
   async saveEvaluations(

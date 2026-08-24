@@ -3,6 +3,8 @@ import { AboutDialog } from "./components/AboutDialog";
 import { ImportResultDialog } from "./components/ImportResultDialog";
 import { LibraryScreen } from "./features/library/LibraryScreen";
 import { ReviewScreen } from "./features/review/ReviewScreen";
+import { TrainingScreen } from "./features/training/TrainingScreen";
+import { makeTrainingActivity } from "./features/training/trainingData";
 import { useLanguage } from "./i18n/useLanguage";
 import { createGameRepository } from "./lib/db/gameRepository";
 import { parsePgnArchive } from "./lib/pgn/parsePgnArchive";
@@ -20,6 +22,7 @@ export default function App() {
   const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [showAbout, setShowAbout] = useState(false);
+  const [showTraining, setShowTraining] = useState(false);
 
   const refreshGames = useCallback(async () => {
     setGames(await repository.listGames());
@@ -58,10 +61,18 @@ export default function App() {
     }
   }, [refreshGames, repository, t]);
 
+  const handleOpenGame = useCallback((game: StoredGame) => {
+    setShowTraining(false);
+    setSelectedGame(game);
+    void repository.recordTrainingActivity(
+      makeTrainingActivity("review", game.fingerprint, new Date()),
+    ).catch(() => undefined);
+  }, [repository]);
+
   return (
     <div className="app-frame">
       <nav className="topbar">
-        <button className="brand" onClick={() => setSelectedGame(null)} aria-label={t("library")}>
+        <button className="brand" onClick={() => { setSelectedGame(null); setShowTraining(false); }} aria-label={t("library")}>
           <span className="brand-mark" aria-hidden="true">♞</span>
           <span><strong>{t("appName")}</strong><small>{t("tagline")}</small></span>
         </button>
@@ -70,12 +81,22 @@ export default function App() {
             <button className={language === "en" ? "active" : ""} onClick={() => setLanguage("en")}>EN</button>
             <button className={language === "fr" ? "active" : ""} onClick={() => setLanguage("fr")}>FR</button>
           </div>
+          <button className="text-button" onClick={() => { setSelectedGame(null); setShowTraining(true); }}>
+            {t("trainingLab")}
+          </button>
           <button className="text-button" onClick={() => setShowAbout(true)}>{t("about")}</button>
         </div>
       </nav>
 
       {isLoading ? (
         <main className="loading-screen"><div className="loading-piece">♞</div><span>{t("appName")}</span></main>
+      ) : showTraining ? (
+        <TrainingScreen
+          games={games}
+          repository={repository}
+          onBack={() => setShowTraining(false)}
+          t={t}
+        />
       ) : selectedGame ? (
         <ReviewScreen game={selectedGame} repository={repository} language={language} onBack={() => setSelectedGame(null)} t={t} />
       ) : (
@@ -83,7 +104,7 @@ export default function App() {
           games={games}
           isImporting={isImporting}
           onImport={handleImport}
-          onOpenGame={setSelectedGame}
+          onOpenGame={handleOpenGame}
           repository={repository}
           onGamesChanged={refreshGames}
           t={t}

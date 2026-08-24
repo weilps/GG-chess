@@ -99,6 +99,44 @@ describe("MemoryGameRepository", () => {
       checkedAt: "2026-08-21T00:00:00Z",
     }]);
   });
+
+  it("groups analysis caches and persists training progress idempotently", async () => {
+    const repository = new MemoryGameRepository();
+    const engine: EngineInfo = { path: "stockfish.exe", name: "Stockfish", version: "18" };
+    await repository.saveEvaluations("one", engine, "balanced", [
+      { positionIndex: 0, scoreCp: 30, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4"] },
+      { positionIndex: 1, scoreCp: 20, mate: null, depth: 18, bestMove: "e7e5", pv: ["e7e5"] },
+    ]);
+    expect(await repository.listAnalysisCaches()).toMatchObject([{
+      gameFingerprint: "one",
+      engineName: "Stockfish",
+      profile: "balanced",
+      evaluations: [{ positionIndex: 0 }, { positionIndex: 1 }],
+    }]);
+
+    const progress = {
+      puzzleKey: "one|0",
+      attempts: 2,
+      successes: 1,
+      lastResult: "good" as const,
+      dueAt: "2026-08-28T00:00:00Z",
+      updatedAt: "2026-08-25T00:00:00Z",
+    };
+    await repository.savePuzzleProgress(progress);
+    expect(await repository.listPuzzleProgress()).toEqual([progress]);
+
+    const activity = {
+      weekStart: "2026-08-24",
+      kind: "review" as const,
+      itemKey: "one",
+      occurredOn: "2026-08-25",
+      createdAt: "2026-08-25T01:00:00Z",
+    };
+    await repository.recordTrainingActivity(activity);
+    await repository.recordTrainingActivity({ ...activity, createdAt: "later" });
+    expect(await repository.listTrainingActivities("2026-08-24")).toEqual([activity]);
+    expect(await repository.listTrainingDays()).toEqual(["2026-08-25"]);
+  });
 });
 
 describe("sortGamesNewestFirst", () => {
