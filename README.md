@@ -22,7 +22,22 @@ npm test
 npm run build
 cargo test --manifest-path src-tauri/Cargo.toml
 npm run tauri build -- --debug --no-bundle
+npm run licenses:check
 ```
+
+## Data, backup and updates
+
+The About dialog can create a portable JSON backup, restore one transactionally, export the complete library as PGN, and check manually for updates. Backups include games, compatible Stockfish caches, Chess.com sync progress, Training Lab history and portable preferences; they exclude engine paths, secrets, Codex answers and consent. A malformed backup is rejected before the database is changed.
+
+Update checks happen only after a click. Stable Windows releases are retrieved from this repository, verified with Tauri's committed updater public key, and installed only after confirmation. ChessMate performs no automatic update request in the background.
+
+## Windows distribution
+
+Development installers are per-user x64 NSIS bundles and are explicitly unsigned. Stable releases are produced only by the protected `release-windows` workflow: the tag, npm, Cargo and Tauri versions must match; all quality gates must pass; both the application and installer must carry a trusted, timestamped Authenticode signature; the updater installer must carry its separate Tauri signature; and an installer preservation smoke test must pass before the draft GitHub release is made public.
+
+The workflow requires `WINDOWS_CERTIFICATE_PFX_BASE64`, `WINDOWS_CERTIFICATE_PASSWORD`, `TAURI_SIGNING_PRIVATE_KEY` and `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` repository secrets. The updater private key and password must also have an encrypted offline recovery copy outside Git. Losing that key prevents existing installations from trusting future updates; rotating it therefore requires an installer release signed through the existing update chain.
+
+Release assets include the NSIS installer and updater signature, `latest.json`, SHA-256 checksums, SPDX SBOM, MIT license and generated third-party notices. ChessMate does not bundle Stockfish, Codex CLI, Chess.com content or En Croissant code.
 
 ## Scope
 
@@ -78,4 +93,4 @@ ChessMate is a new independent project inspired in part by [En Croissant](https:
 
 ## Status
 
-GUI-12 personalized local Training Lab slice, built through the Finn `spec → build → review` loop.
+GUI-13 Windows distribution and portable-data slice, built through the Finn `spec → build → review` loop. A public stable installer remains intentionally blocked until the repository receives a trusted Authenticode certificate.

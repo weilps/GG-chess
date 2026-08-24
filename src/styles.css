@@ -335,6 +335,23 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .rejection-list p { margin: 7px 0 0; color: #725c51; font-size: 13px; }
 .about-card p { color: #66736c; line-height: 1.6; }
 .about-card a { display: block; margin: 0 0 22px; color: #87601e; font-weight: 700; }
+.about-card { width: min(720px, 100%); }
+.data-updates { margin: 24px 0; padding: 20px; border: 1px solid #dfe5dd; border-radius: 14px; background: #f5f7f2; text-align: left; }
+.data-updates-heading { display: flex; align-items: flex-start; justify-content: space-between; gap: 16px; }
+.data-updates-heading h3 { margin: 2px 0 8px; font-family: Georgia, serif; font-size: 21px; }
+.data-updates-heading > span { padding: 5px 8px; border-radius: 999px; background: #e6ece4; color: #415249; font-size: 11px; font-weight: 800; }
+.data-updates .eyebrow { margin: 0; color: #87601e; }
+.data-updates > p, .update-area > p { margin: 8px 0 12px; font-size: 12px; }
+.data-action-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+.data-action-grid button, .available-update button, .update-area > button:not(.primary-button) { min-height: 38px; border: 1px solid #cbd5cd; border-radius: 9px; background: #fff; color: #294838; font-weight: 750; }
+.data-action-grid button:disabled, .update-area button:disabled { opacity: .55; cursor: wait; }
+.update-area { margin-top: 16px; padding-top: 14px; border-top: 1px solid #dfe5dd; }
+.update-area .primary-button { padding: 9px 13px; font-size: 12px; }
+.available-update { display: grid; gap: 8px; margin-top: 10px; }
+.available-update small { max-height: 96px; overflow-y: auto; white-space: pre-wrap; }
+.data-updates > small, .update-area > small { display: block; margin-top: 9px; color: #718079; font-size: 10px; line-height: 1.45; }
+.data-status { margin: 12px 0 0 !important; padding: 9px 11px; border-radius: 9px; background: #e5f0e7; color: #31563b !important; font-size: 12px; font-weight: 700; }
+.data-status.error { background: #f7e6e1; color: #8a392b !important; }
 .brand-mark.large { width: 64px; height: 64px; margin: 0 auto; font-size: 40px; }
 .error-banner { position: fixed; right: 24px; bottom: 24px; z-index: 30; display: grid; grid-template-columns: 1fr auto; gap: 2px 18px; max-width: 440px; padding: 16px 18px; border-left: 4px solid #b85346; border-radius: 10px; color: #5d2e28; background: #fff3f1; box-shadow: 0 12px 34px rgba(64, 34, 29, .2); }
 .error-banner strong, .error-banner span { grid-column: 1; }
