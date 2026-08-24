@@ -19,8 +19,8 @@ vi.mock("../engine/EnginePanel", async () => {
     profile: "balanced",
     loading: false,
     evaluations: [
-      { positionIndex: 0, scoreCp: 100, mate: null, depth: 18, bestMove: "e2e4", pv: [] },
-      { positionIndex: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "c7c5", pv: [] },
+      { positionIndex: 0, scoreCp: 100, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4", "e7e5"] },
+      { positionIndex: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "c7c5", pv: ["c7c5", "g1f3"] },
       { positionIndex: 2, scoreCp: 150, mate: null, depth: 18, bestMove: null, pv: [] },
     ],
   };
@@ -88,11 +88,18 @@ describe("ReviewScreen Game Review integration", () => {
       name: "Black, move 1 e5, Inaccuracy, 100 cp",
     }));
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[2]);
+    const coach = screen.getByRole("region", { name: "Local coach" });
+    expect(coach).toHaveTextContent("Inaccuracy");
+    expect(coach).toHaveTextContent("Played e5");
+    expect(coach).toHaveTextContent("c5 Nf3");
 
     fireEvent.click(screen.getByRole("button", { name: "Switch profile fixture" }));
     await waitFor(() => expect(screen.getByText("Analyze positions to reveal the course of the game.")).toBeInTheDocument());
     expect(screen.queryByRole("button", { name: /Position 1, after e4/ })).not.toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Evaluation bar unavailable for this position" }))
       .not.toHaveAttribute("aria-valuenow");
+    expect(coach).toHaveTextContent("Not rated");
+    expect(coach).toHaveTextContent("Analyze both adjacent positions");
+    expect(coach).not.toHaveTextContent("c5 Nf3");
   });
 });

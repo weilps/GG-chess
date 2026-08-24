@@ -26,7 +26,7 @@ npm run tauri build -- --debug --no-bundle
 
 ## Scope
 
-This release includes local analysis, ChessMate move ratings, and an interactive Game Review for imported, completed games with an existing Windows UCI engine. It intentionally contains no coach, Chess.com integration, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
+This release includes local analysis, ChessMate move ratings, an interactive Game Review, and deterministic local coaching for imported, completed games with an existing Windows UCI engine. It intentionally contains no AI coach, Chess.com integration, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
 
 ## Local Stockfish analysis
 
@@ -48,10 +48,16 @@ The interactive evaluation graph shows White's advantage from the starting posit
 
 The vertical evaluation bar maps White's centipawn evaluation to `100 / (1 + exp(−cp / 400))`; mate is 100% or 0%, and an unavailable position is explicitly neutral. The summary counts every classification by player and lists at most five Inaccuracy, Mistake, Miss, or Blunder moments, sorted by centipawn loss then move order. All Game Review data is derived only from the active local engine/version/profile cache.
 
+## Deterministic local coach
+
+Select any move to see the classification reason, evaluation before and after from the mover's point of view, centipawn loss, Stockfish's saved best move, and up to six legal SAN plies from its principal variation. Missing or invalid saved lines are stated explicitly instead of being invented.
+
+Tips use a transparent fixed priority: found or missed mate, checking best line, capturing best line, forcing-move safety for errors, candidate comparison for small losses, then process reinforcement. The same saved position always produces the same insight; this coach uses no model, network request, or official Chess.com explanation.
+
 ## Inspiration
 
 ChessMate is a new independent project inspired in part by [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant). No En Croissant code is included. En Croissant is licensed under GPL-3.0.
 
 ## Status
 
-GUI-8 interactive Game Review slice, built through the Finn `spec → build → review` loop.
+GUI-9 deterministic local coach slice, built through the Finn `spec → build → review` loop.
