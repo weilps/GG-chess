@@ -66,6 +66,7 @@ describe("ReviewScreen", () => {
       />,
     );
     expect(screen.getByText("Analysis is available only for completed games.")).toBeInTheDocument();
+    expect(screen.getByText("Coach guidance is available only for completed games.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Analyze" })).not.toBeInTheDocument();
   });
 });

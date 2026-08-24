@@ -5,6 +5,8 @@ import type { GameRepository } from "../../lib/db/gameRepository";
 import type { AnalysisSnapshot, StoredGame } from "../../types";
 import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
 import { MoveRatingBadge, MoveRatingDetail } from "../classification/MoveRatings";
+import { CoachPanel } from "../coach/CoachPanel";
+import { buildCoachInsight } from "../coach/coachInsight";
 import { EnginePanel } from "../engine/EnginePanel";
 import { EvaluationBar } from "./EvaluationBar";
 import { EvaluationChart } from "./EvaluationChart";
@@ -66,6 +68,12 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
   );
   const accuracy = useMemo(() => calculateGameAccuracy(moveRatings), [moveRatings]);
   const selectedRating = positionIndex > 0 ? moveRatings[positionIndex - 1] ?? null : null;
+  const coachInsight = useMemo(
+    () => isCompletedGame && selectedRating
+      ? buildCoachInsight(game, selectedRating, activeEvaluations)
+      : null,
+    [activeEvaluations, game, isCompletedGame, selectedRating],
+  );
   const selectedEvaluation = activeEvaluations.find(
     (evaluation) => evaluation.positionIndex === positionIndex,
   ) ?? null;
@@ -126,6 +134,11 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
             gameResult={game.result}
             selectedPositionIndex={positionIndex}
             onSelectPosition={goTo}
+            t={t}
+          />
+          <CoachPanel
+            insight={coachInsight}
+            unavailable={!isCompletedGame}
             t={t}
           />
           <GameReviewSummary
