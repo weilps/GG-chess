@@ -30,9 +30,8 @@ jobs:
         shell: pwsh
         run: ./scripts/check-workflows.ps1
       - name: Scan tracked history for secrets
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        shell: pwsh
+        run: ./scripts/check-secrets.ps1
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Test Rust engine layer
