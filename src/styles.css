@@ -127,11 +127,12 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .evaluation-chart .rating-great { fill: #4b9e79; }
 .evaluation-chart .rating-best { fill: #b9d66e; }
 .evaluation-chart .rating-excellent { fill: #d0dd9b; }
-.evaluation-chart .rating-good { fill: #aeb9ae; }
+.evaluation-chart .rating-good { fill: #d7ddd1; }
 .evaluation-chart .rating-inaccuracy { fill: #eccb74; }
 .evaluation-chart .rating-mistake { fill: #d8894d; }
 .evaluation-chart .rating-miss { fill: #bd6556; }
 .evaluation-chart .rating-blunder { fill: #a63e3e; }
+.evaluation-chart .rating-notRated { fill: #e5e8e2; }
 .chart-legend { display: flex; flex-wrap: wrap; gap: 5px 11px; padding-top: 8px; border-top: 1px solid #e4e7e0; color: #748078; font-size: 9px; }
 .chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
 .chart-legend i, .classification-counts i { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
