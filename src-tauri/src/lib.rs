@@ -1,5 +1,6 @@
 use std::{fs, path::PathBuf};
 
+mod chess_com;
 mod codex;
 mod engine;
 
@@ -47,7 +48,9 @@ pub fn run() {
             engine::validate_engine,
             engine::analyze_game,
             engine::cancel_analysis,
-            codex::request_codex_advice
+            codex::request_codex_advice,
+            chess_com::chess_com_fetch_archives,
+            chess_com::chess_com_fetch_month
         ])
         .run(tauri::generate_context!())
         .expect("error while running ChessMate");

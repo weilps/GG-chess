@@ -79,7 +79,15 @@ export default function App() {
       ) : selectedGame ? (
         <ReviewScreen game={selectedGame} repository={repository} language={language} onBack={() => setSelectedGame(null)} t={t} />
       ) : (
-        <LibraryScreen games={games} isImporting={isImporting} onImport={handleImport} onOpenGame={setSelectedGame} t={t} />
+        <LibraryScreen
+          games={games}
+          isImporting={isImporting}
+          onImport={handleImport}
+          onOpenGame={setSelectedGame}
+          repository={repository}
+          onGamesChanged={refreshGames}
+          t={t}
+        />
       )}
 
       {error && (

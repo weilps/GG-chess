@@ -1,11 +1,15 @@
 import type { StoredGame } from "../../types";
 import type { TranslationKey } from "../../i18n/translations";
+import type { GameRepository } from "../../lib/db/gameRepository";
+import { ChessComImportPanel } from "../chess-com/ChessComImportPanel";
 
 interface LibraryScreenProps {
   games: StoredGame[];
   isImporting: boolean;
   onImport: () => void;
   onOpenGame: (game: StoredGame) => void;
+  repository: GameRepository;
+  onGamesChanged: () => Promise<void>;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
 }
 
@@ -14,6 +18,8 @@ export function LibraryScreen({
   isImporting,
   onImport,
   onOpenGame,
+  repository,
+  onGamesChanged,
   t,
 }: LibraryScreenProps) {
   return (
@@ -29,6 +35,12 @@ export function LibraryScreen({
           {isImporting ? t("importing") : t("importPgn")}
         </button>
       </section>
+
+      <ChessComImportPanel
+        repository={repository}
+        onGamesChanged={onGamesChanged}
+        t={t}
+      />
 
       {games.length === 0 ? (
         <section className="empty-state">

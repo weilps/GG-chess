@@ -333,14 +333,9 @@ fn verify_login(path: &Path) -> Result<(), String> {
     let args = vec!["login".to_string(), "status".to_string()];
     run_process(path, &args, LOGIN_TIMEOUT)
         .map(|_| ())
-        .map_err(|error| {
-            if error == "codex_timeout" {
-                error
-            } else if error == "codex_cli_missing" {
-                error
-            } else {
-                "codex_not_logged_in".to_string()
-            }
+        .map_err(|error| match error.as_str() {
+            "codex_timeout" | "codex_cli_missing" => error,
+            _ => "codex_not_logged_in".to_string(),
         })
 }
 

@@ -26,7 +26,13 @@ npm run tauri build -- --debug --no-bundle
 
 ## Scope
 
-This release includes local analysis, ChessMate move ratings, an interactive Game Review, deterministic local coaching, and an optional Codex adviser for imported, completed games. It intentionally contains no Chess.com integration, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
+This release includes local analysis, ChessMate move ratings, an interactive Game Review, deterministic local coaching, an optional Codex adviser, and public Chess.com archive import for completed standard games. It intentionally contains no private-account access, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
+
+## Public Chess.com import
+
+The Windows app can import completed public standard games from a Chess.com username without login, password, cookie or token. Requests are sent serially only to the official read-only Published Data API at `api.chess.com`; monthly `ETag` and `Last-Modified` validators are stored locally so completed months are skipped and the latest month is revalidated. Existing PGN fingerprints prevent duplicates, partial progress is preserved, and Chess.com accuracy or annotations are ignored.
+
+Public data can be delayed or cached by its provider. ChessMate is an independent project, is not affiliated with Chess.com, and credits the official [Chess.com Published Data API](https://www.chess.com/news/view/published-data-api).
 
 ## Local Stockfish analysis
 
@@ -66,4 +72,4 @@ ChessMate is a new independent project inspired in part by [En Croissant](https:
 
 ## Status
 
-GUI-10 optional local Codex adviser slice, built through the Finn `spec → build → review` loop.
+GUI-11 incremental public Chess.com import slice, built through the Finn `spec → build → review` loop.

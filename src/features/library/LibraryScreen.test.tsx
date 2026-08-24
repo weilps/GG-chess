@@ -3,6 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
 import type { StoredGame } from "../../types";
 import { LibraryScreen } from "./LibraryScreen";
+import { MemoryGameRepository } from "../../lib/db/gameRepository";
 
 const game: StoredGame = {
   fingerprint: "one",
@@ -28,6 +29,8 @@ describe("LibraryScreen", () => {
         isImporting={false}
         onImport={vi.fn()}
         onOpenGame={onOpenGame}
+        repository={new MemoryGameRepository()}
+        onGamesChanged={vi.fn()}
         t={(key, variables) => translate("en", key, variables)}
       />,
     );
