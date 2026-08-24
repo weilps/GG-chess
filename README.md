@@ -26,7 +26,7 @@ npm run tauri build -- --debug --no-bundle
 
 ## Scope
 
-This release includes local analysis, ChessMate move ratings, an interactive Game Review, deterministic local coaching, an optional Codex adviser, and public Chess.com archive import for completed standard games. It intentionally contains no private-account access, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
+This release includes local analysis, ChessMate move ratings, an interactive Game Review, deterministic local coaching, an optional Codex adviser, public Chess.com archive import, and a local Training Lab for completed standard games. It intentionally contains no private-account access, variants, live play, cloud accounts or telemetry. Never use engine assistance during an active competitive game.
 
 ## Public Chess.com import
 
@@ -66,10 +66,16 @@ The Windows app can turn the deterministic move facts into a personalized explan
 
 This is an unofficial local workaround using the existing ChatGPT/Codex login and subscription quota, not an OpenAI API integration. It needs no separate API key or API billing, but it has no API SLA and remains subject to subscription availability and quota. ChessMate pins `gpt-5.6-terra` with `medium` reasoning, runs it ephemerally in an empty workspace with a read-only sandbox, permits one request at a time, and stops waiting after three minutes. The deterministic coach remains available when Codex is missing, logged out, busy, or unavailable.
 
+## Training Lab
+
+Training Lab turns Inaccuracy, Mistake, Miss and Blunder positions from saved Stockfish caches into local puzzles. Revenge mode accepts exactly the saved legal best move, supports promotions, and schedules the position for one, three or seven days according to Again, Good or Easy. Reveal uses only the saved best move and legal principal variation.
+
+Calm Mentor, Tactical Drill and Playful Rival change deterministic encouragement only; they never change ratings, evaluations or lines. Weekly quests track distinct reviewed games, trained mistakes and opened repertoire lines from Monday to Monday. Trends compare up to five recent analyzed games with the previous five, while the opening repertoire groups the player's first four SAN plies with W-D-L, score, available ChessMate Accuracy and problem-move counts. Player aliases, puzzle history, quests and streak days remain in the local database; Training Lab makes no network or model request.
+
 ## Inspiration
 
 ChessMate is a new independent project inspired in part by [En Croissant](https://github.com/franciscoBSalgueiro/en-croissant). No En Croissant code is included. En Croissant is licensed under GPL-3.0.
 
 ## Status
 
-GUI-11 incremental public Chess.com import slice, built through the Finn `spec → build → review` loop.
+GUI-12 personalized local Training Lab slice, built through the Finn `spec → build → review` loop.
