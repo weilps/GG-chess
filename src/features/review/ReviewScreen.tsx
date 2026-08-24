@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Chessboard } from "react-chessboard";
 import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
-import type { StoredGame } from "../../types";
+import type { AnalysisSnapshot, StoredGame } from "../../types";
+import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
+import { MoveRatingBadge, MoveRatingsSummary } from "../classification/MoveRatings";
 import { EnginePanel } from "../engine/EnginePanel";
 
 interface ReviewScreenProps {
@@ -15,6 +17,12 @@ interface ReviewScreenProps {
 export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps) {
   const [positionIndex, setPositionIndex] = useState(0);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
+  const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot>({
+    cacheKey: null,
+    evaluations: [],
+    loading: true,
+    profile: "balanced",
+  });
   const lastPositionIndex = game.positions.length - 1;
   const isCompletedGame = ["1-0", "0-1", "1/2-1/2"].includes(game.result);
 
@@ -44,6 +52,13 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
     }
     return pairs;
   }, [game.moves]);
+
+  const moveRatings = useMemo(
+    () => classifyGameMoves(game, analysisSnapshot.loading ? [] : analysisSnapshot.evaluations),
+    [analysisSnapshot.evaluations, analysisSnapshot.loading, game],
+  );
+  const accuracy = useMemo(() => calculateGameAccuracy(moveRatings), [moveRatings]);
+  const selectedRating = positionIndex > 0 ? moveRatings[positionIndex - 1] ?? null : null;
 
   const goTo = (next: number) =>
     setPositionIndex(Math.min(lastPositionIndex, Math.max(0, next)));
@@ -99,6 +114,7 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
             <div><span>{t("timeControl")}</span><strong>{game.timeControl ?? "—"}</strong></div>
             <div><span>{t("source")}</span><strong>{game.source ?? "—"}</strong></div>
           </div>
+          <MoveRatingsSummary accuracy={accuracy} selected={selectedRating} t={t} />
           <div className="move-list">
             {movePairs.map((pair) => {
               const whiteIndex = (pair.number - 1) * 2 + 1;
@@ -106,9 +122,15 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
               return (
                 <div className="move-row" key={pair.number}>
                   <span className="move-number">{pair.number}.</span>
-                  <button className={positionIndex === whiteIndex ? "selected-move" : ""} onClick={() => goTo(whiteIndex)}>{pair.white}</button>
+                  <button className={positionIndex === whiteIndex ? "selected-move" : ""} onClick={() => goTo(whiteIndex)}>
+                    <span>{pair.white}</span>
+                    <MoveRatingBadge rating={moveRatings[whiteIndex - 1]} t={t} />
+                  </button>
                   {pair.black ? (
-                    <button className={positionIndex === blackIndex ? "selected-move" : ""} onClick={() => goTo(blackIndex)}>{pair.black}</button>
+                    <button className={positionIndex === blackIndex ? "selected-move" : ""} onClick={() => goTo(blackIndex)}>
+                      <span>{pair.black}</span>
+                      <MoveRatingBadge rating={moveRatings[blackIndex - 1]} t={t} />
+                    </button>
                   ) : <span />}
                 </div>
               );
@@ -120,6 +142,7 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
               positionIndex={positionIndex}
               repository={repository}
               t={t}
+              onAnalysisStateChange={setAnalysisSnapshot}
             />
           ) : (
             <section className="analysis-unavailable" aria-label={t("localAnalysis")}>

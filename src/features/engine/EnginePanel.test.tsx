@@ -107,6 +107,7 @@ describe("EnginePanel", () => {
 
   it("hides the previous cache and disables analysis while a new profile loads", async () => {
     const repository = new MemoryGameRepository();
+    const onAnalysisStateChange = vi.fn();
     await repository.saveEvaluations(game.fingerprint, engine, "balanced", [{
       positionIndex: 0,
       scoreCp: 35,
@@ -124,18 +125,45 @@ describe("EnginePanel", () => {
       return originalGetAnalysis(fingerprint, selectedEngine, profile);
     });
 
-    render(<EnginePanel game={game} positionIndex={0} repository={repository} t={t} />);
+    render(
+      <EnginePanel
+        game={game}
+        positionIndex={0}
+        repository={repository}
+        t={t}
+        onAnalysisStateChange={onAnalysisStateChange}
+      />,
+    );
     expect(await screen.findByText("+0.35")).toBeInTheDocument();
+    expect(onAnalysisStateChange).toHaveBeenCalledWith(expect.objectContaining({
+      evaluations: [expect.objectContaining({ scoreCp: 35 })],
+      loading: false,
+      profile: "balanced",
+    }));
     fireEvent.change(screen.getByLabelText("Analysis profile"), { target: { value: "deep" } });
 
     const analyzeButton = screen.getByRole("button", { name: "Analyze" });
     expect(analyzeButton).toBeDisabled();
     expect(screen.queryByText("+0.35")).not.toBeInTheDocument();
     expect(screen.getByText(/Loading the analysis cache/)).toBeInTheDocument();
+    expect(onAnalysisStateChange).toHaveBeenCalledWith(expect.objectContaining({
+      evaluations: [],
+      loading: true,
+      profile: "deep",
+    }));
+    expect(onAnalysisStateChange).not.toHaveBeenCalledWith(expect.objectContaining({
+      evaluations: [expect.objectContaining({ scoreCp: 35 })],
+      profile: "deep",
+    }));
     fireEvent.click(analyzeButton);
     expect(mocks.analyzePositions).not.toHaveBeenCalled();
 
     await act(async () => finishDeepLoad?.([]));
     await waitFor(() => expect(screen.getByRole("button", { name: "Analyze" })).toBeEnabled());
+    expect(onAnalysisStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      evaluations: [],
+      loading: false,
+      profile: "deep",
+    }));
   });
 });

@@ -69,3 +69,48 @@ export interface StoredPositionEvaluation extends PositionEvaluation {
   profile: AnalysisProfileId;
   analyzedAt: string;
 }
+
+export interface AnalysisSnapshot {
+  cacheKey: string | null;
+  evaluations: PositionEvaluation[];
+  loading: boolean;
+  profile: AnalysisProfileId;
+}
+
+export type MoveClassificationId =
+  | "brilliant"
+  | "great"
+  | "best"
+  | "excellent"
+  | "good"
+  | "inaccuracy"
+  | "mistake"
+  | "miss"
+  | "blunder"
+  | "notRated";
+
+export type MoveClassificationReason =
+  | "brilliantSacrifice"
+  | "greatMate"
+  | "greatRecovery"
+  | "engineBest"
+  | "missedWin"
+  | "centipawnLoss"
+  | "missingEvaluation"
+  | "invalidMove";
+
+export interface MoveClassification {
+  moveIndex: number;
+  positionIndex: number;
+  color: "white" | "black";
+  san: string;
+  uci: string | null;
+  classification: MoveClassificationId;
+  reason: MoveClassificationReason;
+  centipawnLoss: number | null;
+}
+
+export interface GameAccuracy {
+  white: number | null;
+  black: number | null;
+}
