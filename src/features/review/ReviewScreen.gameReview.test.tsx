@@ -1,0 +1,98 @@
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { Chess } from "chess.js";
+import { describe, expect, it, vi } from "vitest";
+import { translate } from "../../i18n/translations";
+import { MemoryGameRepository } from "../../lib/db/gameRepository";
+import type { AnalysisSnapshot, StoredGame } from "../../types";
+import { ReviewScreen } from "./ReviewScreen";
+
+vi.mock("react-chessboard", () => ({
+  Chessboard: ({ options }: { options: { position: string } }) => (
+    <div data-testid="chessboard-position">{options.position}</div>
+  ),
+}));
+
+vi.mock("../engine/EnginePanel", async () => {
+  const { useEffect } = await import("react");
+  const snapshot: AnalysisSnapshot = {
+    cacheKey: "review\u0000Stockfish 18\u000018\u0000balanced",
+    profile: "balanced",
+    loading: false,
+    evaluations: [
+      { positionIndex: 0, scoreCp: 100, mate: null, depth: 18, bestMove: "e2e4", pv: [] },
+      { positionIndex: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "c7c5", pv: [] },
+      { positionIndex: 2, scoreCp: 150, mate: null, depth: 18, bestMove: null, pv: [] },
+    ],
+  };
+  return {
+    EnginePanel: ({ onAnalysisStateChange }: {
+      onAnalysisStateChange?: (next: AnalysisSnapshot) => void;
+    }) => {
+      useEffect(() => onAnalysisStateChange?.(snapshot), [onAnalysisStateChange]);
+      return (
+        <button onClick={() => onAnalysisStateChange?.({
+          cacheKey: null,
+          profile: "deep",
+          loading: true,
+          evaluations: [],
+        })}>
+          Switch profile fixture
+        </button>
+      );
+    },
+  };
+});
+
+function reviewedGame(): StoredGame {
+  const chess = new Chess();
+  const positions = [chess.fen()];
+  chess.move("e4");
+  positions.push(chess.fen());
+  chess.move("e5");
+  positions.push(chess.fen());
+  return {
+    fingerprint: "game-review-integration",
+    white: "Ada",
+    black: "Grace",
+    result: "1-0",
+    playedAt: null,
+    displayDate: null,
+    timeControl: null,
+    source: null,
+    rawPgn: "",
+    moves: ["e4", "e5"],
+    positions,
+    importedAt: "2026-08-24T00:00:00Z",
+  };
+}
+
+describe("ReviewScreen Game Review integration", () => {
+  it("keeps graph, critical moments, board, and active cache synchronized", async () => {
+    const game = reviewedGame();
+    render(
+      <ReviewScreen
+        game={game}
+        repository={new MemoryGameRepository()}
+        onBack={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    const firstMovePoint = await screen.findByRole("button", {
+      name: "Position 1, after e4, evaluation +0.50",
+    });
+    fireEvent.click(firstMovePoint);
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
+
+    fireEvent.click(screen.getByRole("button", {
+      name: "Black, move 1 e5, Inaccuracy, 100 cp",
+    }));
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[2]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Switch profile fixture" }));
+    await waitFor(() => expect(screen.getByText("Analyze positions to reveal the course of the game.")).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: /Position 1, after e4/ })).not.toBeInTheDocument();
+    expect(screen.getByRole("meter", { name: "Evaluation bar unavailable for this position" }))
+      .not.toHaveAttribute("aria-valuenow");
+  });
+});

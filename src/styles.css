@@ -62,7 +62,13 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .review-title em { margin: 0 9px; color: #9c792f; font-family: "Segoe UI", sans-serif; font-size: 12px; font-style: normal; }
 .review-workspace { width: min(1260px, 100%); margin: 0 auto; display: grid; grid-template-columns: minmax(500px, 730px) minmax(300px, 1fr); gap: 26px; align-items: start; }
 .board-column { min-width: 0; }
+.board-stage { min-width: 0; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: stretch; }
 .board-frame { padding: 10px; border-radius: 14px; background: #fff; box-shadow: 0 22px 50px rgba(35, 54, 43, .16); }
+.evaluation-bar { min-height: 320px; padding: 6px; border-radius: 11px; background: #25332b; box-shadow: 0 14px 34px rgba(35, 54, 43, .15); }
+.evaluation-bar-track { position: relative; width: 100%; height: 100%; min-height: inherit; overflow: hidden; border-radius: 6px; color: #f7f8f2; background: #26352d; }
+.evaluation-bar-white { position: absolute; right: 0; bottom: 0; left: 0; background: #f4f4ed; transition: height .18s ease; }
+.evaluation-bar strong { position: absolute; z-index: 1; top: 50%; left: 50%; padding: 4px 2px; border-radius: 4px; color: #fff; background: rgba(30, 45, 36, .72); font-size: 9px; transform: translate(-50%, -50%) rotate(-90deg); white-space: nowrap; }
+.evaluation-bar-unavailable { opacity: .62; }
 .position-controls { margin-top: 16px; display: grid; grid-template-columns: 48px 48px 1fr 48px 48px; align-items: center; gap: 6px; }
 .position-controls button { height: 40px; border: 1px solid #ccd2c8; border-radius: 9px; color: #294838; background: #fff; font-weight: 700; font-size: 18px; }
 .position-controls button:disabled { opacity: .35; cursor: default; }
@@ -102,6 +108,53 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .rating-miss { background: #bd6556; }
 .rating-blunder { background: #a63e3e; }
 .rating-notRated { color: #7e8781; background: #e5e8e2; }
+.selected-move-summary .selected-rating { margin-top: 0; }
+.evaluation-chart-card, .game-review-summary { margin-top: 18px; border: 1px solid #d7dbd3; border-radius: 14px; background: rgba(251, 252, 248, .94); box-shadow: 0 12px 30px rgba(39, 56, 46, .07); }
+.evaluation-chart-card { padding: 16px 18px 12px; }
+.game-review-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+.game-review-heading > div { display: flex; flex-direction: column; gap: 3px; }
+.game-review-heading strong { color: #30483b; font-family: Georgia, serif; font-size: 16px; }
+.game-review-heading small { color: #89918b; font-size: 10px; }
+.evaluation-chart { width: 100%; min-height: 150px; display: block; margin-top: 8px; overflow: visible; }
+.evaluation-chart text { fill: #89918b; font: 10px "Segoe UI", sans-serif; }
+.chart-grid-line { stroke: #e4e7e0; stroke-width: 1; }
+.chart-zero-line { stroke: #aeb7ae; stroke-width: 1.4; stroke-dasharray: 5 4; }
+.evaluation-line { fill: none; stroke: #6d8074; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.evaluation-point { fill: #7c8880; stroke: #fff; stroke-width: 2; cursor: pointer; transition: r .12s ease; }
+.evaluation-point:hover, .evaluation-point:focus { stroke: #d6a64a; stroke-width: 3; outline: none; }
+.evaluation-point.selected-chart-point { stroke: #294838; stroke-width: 3; }
+.evaluation-chart .rating-brilliant { fill: #6ed7c3; }
+.evaluation-chart .rating-great { fill: #4b9e79; }
+.evaluation-chart .rating-best { fill: #b9d66e; }
+.evaluation-chart .rating-excellent { fill: #d0dd9b; }
+.evaluation-chart .rating-good { fill: #aeb9ae; }
+.evaluation-chart .rating-inaccuracy { fill: #eccb74; }
+.evaluation-chart .rating-mistake { fill: #d8894d; }
+.evaluation-chart .rating-miss { fill: #bd6556; }
+.evaluation-chart .rating-blunder { fill: #a63e3e; }
+.chart-legend { display: flex; flex-wrap: wrap; gap: 5px 11px; padding-top: 8px; border-top: 1px solid #e4e7e0; color: #748078; font-size: 9px; }
+.chart-legend span { display: inline-flex; align-items: center; gap: 4px; }
+.chart-legend i, .classification-counts i { width: 8px; height: 8px; display: inline-block; border-radius: 50%; }
+.game-review-empty { margin: 14px 0 5px; color: #89918b; font-size: 12px; }
+.game-review-summary { display: grid; grid-template-columns: minmax(180px, .72fr) minmax(0, 1.28fr); overflow: hidden; }
+.summary-accuracy { padding: 16px; border-right: 1px solid #dde1da; background: #f8f9f4; }
+.classification-breakdown { padding: 16px; }
+.classification-sides { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 11px; }
+.classification-side > strong { color: #4d6256; font-size: 11px; }
+.classification-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 5px; margin-top: 6px; }
+.classification-counts span { min-width: 0; display: grid; grid-template-columns: 8px auto; gap: 1px 5px; align-items: center; padding: 5px; border-radius: 6px; background: #f0f2ec; }
+.classification-counts b { color: #30483b; font-size: 11px; }
+.classification-counts small { grid-column: 1 / 3; overflow: hidden; color: #89918b; font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.not-rated-count { display: block; margin-top: 6px; color: #89918b; font-size: 9px; }
+.critical-moments { grid-column: 1 / 3; padding: 16px; border-top: 1px solid #dde1da; }
+.critical-moment-list { display: grid; grid-template-columns: repeat(auto-fit, minmax(175px, 1fr)); gap: 7px; margin-top: 10px; }
+.critical-moment-list button { min-width: 0; display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 8px; align-items: center; padding: 8px; border: 1px solid #dce1d9; border-radius: 8px; color: #30483b; background: #fff; text-align: left; }
+.critical-moment-list button:hover { border-color: #b9c5b9; background: #f7f8f3; }
+.critical-moment-list button > span { min-width: 0; display: flex; flex-direction: column; }
+.critical-moment-list button strong, .critical-moment-list button small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.critical-moment-list button strong { font-size: 10px; }
+.critical-moment-list button small { color: #89918b; font-size: 9px; }
+.critical-moment-list button > b { color: #87601e; font-size: 10px; }
 .engine-panel { flex: 1; min-height: 0; overflow-y: auto; padding: 17px; border-top: 1px solid #dde1da; background: #f8f9f4; }
 .engine-panel-heading { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
 .engine-panel-heading > div { min-width: 0; display: flex; flex-direction: column; gap: 3px; }
@@ -148,6 +201,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 
 @media (max-width: 980px) {
   .review-workspace { grid-template-columns: minmax(460px, 1fr) 310px; }
+  .game-review-summary { grid-template-columns: 1fr; }
+  .summary-accuracy { border-right: 0; border-bottom: 1px solid #dde1da; }
+  .critical-moments { grid-column: 1; }
   .game-row { grid-template-columns: 1fr 1fr 65px 100px 35px; }
   .game-row > :nth-child(5), .game-row > :nth-child(6) { display: none; }
 }

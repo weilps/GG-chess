@@ -4,8 +4,11 @@ import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
 import type { AnalysisSnapshot, StoredGame } from "../../types";
 import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
-import { MoveRatingBadge, MoveRatingsSummary } from "../classification/MoveRatings";
+import { MoveRatingBadge, MoveRatingDetail } from "../classification/MoveRatings";
 import { EnginePanel } from "../engine/EnginePanel";
+import { EvaluationBar } from "./EvaluationBar";
+import { EvaluationChart } from "./EvaluationChart";
+import { GameReviewSummary } from "./GameReviewSummary";
 
 interface ReviewScreenProps {
   game: StoredGame;
@@ -53,12 +56,19 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
     return pairs;
   }, [game.moves]);
 
+  const activeEvaluations = useMemo(
+    () => analysisSnapshot.loading ? [] : analysisSnapshot.evaluations,
+    [analysisSnapshot.evaluations, analysisSnapshot.loading],
+  );
   const moveRatings = useMemo(
-    () => classifyGameMoves(game, analysisSnapshot.loading ? [] : analysisSnapshot.evaluations),
-    [analysisSnapshot.evaluations, analysisSnapshot.loading, game],
+    () => classifyGameMoves(game, activeEvaluations),
+    [activeEvaluations, game],
   );
   const accuracy = useMemo(() => calculateGameAccuracy(moveRatings), [moveRatings]);
   const selectedRating = positionIndex > 0 ? moveRatings[positionIndex - 1] ?? null : null;
+  const selectedEvaluation = activeEvaluations.find(
+    (evaluation) => evaluation.positionIndex === positionIndex,
+  ) ?? null;
 
   const goTo = (next: number) =>
     setPositionIndex(Math.min(lastPositionIndex, Math.max(0, next)));
@@ -81,21 +91,24 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
 
       <section className="review-workspace">
         <div className="board-column">
-          <div className="board-frame" data-testid="board-orientation" data-orientation={orientation}>
-            <Chessboard
-              options={{
-                id: `chessmate-${game.fingerprint}`,
-                position: game.positions[positionIndex],
-                boardOrientation: orientation,
-                allowDragging: false,
-                allowDrawingArrows: false,
-                showAnimations: true,
-                animationDurationInMs: 180,
-                darkSquareStyle: { backgroundColor: "#4f725f" },
-                lightSquareStyle: { backgroundColor: "#d8decf" },
-                boardStyle: { borderRadius: "8px", overflow: "hidden" },
-              }}
-            />
+          <div className="board-stage">
+            <EvaluationBar evaluation={selectedEvaluation} gameResult={game.result} t={t} />
+            <div className="board-frame" data-testid="board-orientation" data-orientation={orientation}>
+              <Chessboard
+                options={{
+                  id: `chessmate-${game.fingerprint}`,
+                  position: game.positions[positionIndex],
+                  boardOrientation: orientation,
+                  allowDragging: false,
+                  allowDrawingArrows: false,
+                  showAnimations: true,
+                  animationDurationInMs: 180,
+                  darkSquareStyle: { backgroundColor: "#4f725f" },
+                  lightSquareStyle: { backgroundColor: "#d8decf" },
+                  boardStyle: { borderRadius: "8px", overflow: "hidden" },
+                }}
+              />
+            </div>
           </div>
           <div className="position-controls" aria-label={t("review")}>
             <button onClick={() => goTo(0)} disabled={positionIndex === 0} aria-label={t("firstMove")}>|‹</button>
@@ -106,6 +119,21 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
             <button onClick={() => goTo(positionIndex + 1)} disabled={positionIndex === lastPositionIndex} aria-label={t("nextMove")}>›</button>
             <button onClick={() => goTo(lastPositionIndex)} disabled={positionIndex === lastPositionIndex} aria-label={t("lastMove")}>›|</button>
           </div>
+          <EvaluationChart
+            evaluations={activeEvaluations}
+            ratings={moveRatings}
+            moves={game.moves}
+            gameResult={game.result}
+            selectedPositionIndex={positionIndex}
+            onSelectPosition={goTo}
+            t={t}
+          />
+          <GameReviewSummary
+            ratings={moveRatings}
+            accuracy={accuracy}
+            onSelectPosition={goTo}
+            t={t}
+          />
         </div>
 
         <aside className="moves-panel">
@@ -114,7 +142,9 @@ export function ReviewScreen({ game, repository, onBack, t }: ReviewScreenProps)
             <div><span>{t("timeControl")}</span><strong>{game.timeControl ?? "—"}</strong></div>
             <div><span>{t("source")}</span><strong>{game.source ?? "—"}</strong></div>
           </div>
-          <MoveRatingsSummary accuracy={accuracy} selected={selectedRating} t={t} />
+          <section className="move-ratings selected-move-summary" aria-label={t("selectedMoveRating")}>
+            <MoveRatingDetail selected={selectedRating} t={t} />
+          </section>
           <div className="move-list">
             {movePairs.map((pair) => {
               const whiteIndex = (pair.number - 1) * 2 + 1;
