@@ -333,6 +333,26 @@ mod tests {
         (format!("http://{address}"), handle)
     }
 
+    fn serve_many(responses: Vec<&'static str>) -> (String, thread::JoinHandle<Vec<String>>) {
+        let listener = TcpListener::bind("127.0.0.1:0").expect("bind fake server");
+        let address = listener.local_addr().expect("fake server address");
+        let handle = thread::spawn(move || {
+            responses
+                .into_iter()
+                .map(|response| {
+                    let (mut stream, _) = listener.accept().expect("accept request");
+                    let mut buffer = [0_u8; 4096];
+                    let count = stream.read(&mut buffer).expect("read request");
+                    stream
+                        .write_all(response.as_bytes())
+                        .expect("write response");
+                    String::from_utf8_lossy(&buffer[..count]).into_owned()
+                })
+                .collect()
+        });
+        (format!("http://{address}"), handle)
+    }
+
     #[test]
     fn normalizes_and_rejects_usernames() {
         assert_eq!(
@@ -416,6 +436,58 @@ mod tests {
             .await;
         server.join().unwrap();
         assert_eq!(result, Err("chess_com_invalid_response".into()));
+    }
+
+    #[tokio::test]
+    async fn maps_redirect_not_found_and_gone_statuses() {
+        let cases = [
+            (
+                "HTTP/1.1 301 Moved Permanently\r\nLocation: https://api.chess.com/pub/player/new-name/games/archives\r\nConnection: close\r\n\r\n",
+                "chess_com_redirected",
+            ),
+            (
+                "HTTP/1.1 404 Not Found\r\nConnection: close\r\n\r\n",
+                "chess_com_not_found",
+            ),
+            (
+                "HTTP/1.1 410 Gone\r\nConnection: close\r\n\r\n",
+                "chess_com_gone",
+            ),
+        ];
+        for (response, expected) in cases {
+            let (base_url, server) = serve_once(response);
+            let result = ChessComClient::new(&base_url)
+                .unwrap()
+                .archives(ChessComCacheRequest {
+                    username: "erik".into(),
+                    etag: None,
+                    last_modified: None,
+                })
+                .await;
+            server.join().unwrap();
+            assert_eq!(result, Err(expected.into()));
+        }
+    }
+
+    #[tokio::test]
+    async fn retries_rate_limit_exactly_once() {
+        const RATE_LIMITED: &str =
+            "HTTP/1.1 429 Too Many Requests\r\nRetry-After: 0\r\nConnection: close\r\n\r\n";
+        let (base_url, server) = serve_many(vec![RATE_LIMITED, RATE_LIMITED]);
+        let result = ChessComClient::new(&base_url)
+            .unwrap()
+            .archives(ChessComCacheRequest {
+                username: "erik".into(),
+                etag: None,
+                last_modified: None,
+            })
+            .await;
+        let requests = server.join().unwrap();
+        assert_eq!(requests.len(), 2);
+        assert!(requests
+            .iter()
+            .all(|request| request.starts_with("GET /pub/player/erik/games/archives")));
+        assert_eq!(result, Err("chess_com_rate_limited".into()));
     }
 
     #[tokio::test]
