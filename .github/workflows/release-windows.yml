@@ -27,6 +27,7 @@ jobs:
       - uses: actions/checkout@v5
         with:
           fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
       - uses: actions/setup-node@v5
         with:
           node-version: 24
@@ -37,6 +38,15 @@ jobs:
           workspaces: src-tauri
 
       - run: npm ci
+      - name: Prove tag provenance
+        shell: pwsh
+        run: |
+          $tagCommit = git rev-list -n 1 --verify $env:RELEASE_TAG
+          if ($LASTEXITCODE -ne 0 -or -not $tagCommit) { throw "Release tag does not exist" }
+          $checkedOutCommit = git rev-parse HEAD
+          if ($tagCommit.Trim() -ne $checkedOutCommit.Trim()) {
+            throw "Checked-out commit does not match $env:RELEASE_TAG"
+          }
       - name: Verify tag, versions and release configuration
         run: npm run release:preflight -- --tag $env:RELEASE_TAG
       - name: Require both signing identities
@@ -64,6 +74,13 @@ jobs:
       - run: npm test
       - run: npm run build
       - run: npm run licenses:check
+      - name: Validate GitHub workflows
+        shell: pwsh
+        run: ./scripts/check-workflows.ps1
+      - name: Scan release history for secrets
+        uses: gitleaks/gitleaks-action@v2
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Test Rust layer

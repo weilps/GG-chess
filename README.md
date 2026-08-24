@@ -29,6 +29,8 @@ npm run licenses:check
 
 The About dialog can create a portable JSON backup, restore one transactionally, export the complete library as PGN, and check manually for updates. Backups include games, compatible Stockfish caches, Chess.com sync progress, Training Lab history and portable preferences; they exclude engine paths, secrets, Codex answers and consent. A malformed backup is rejected before the database is changed.
 
+On Windows, persistent data is stored at `%APPDATA%\app.chessmate.desktop\chessmate.db`. Installation, upgrade and uninstall preserve this database; removing it is a separate, explicit user action.
+
 Update checks happen only after a click. Stable Windows releases are retrieved from this repository, verified with Tauri's committed updater public key, and installed only after confirmation. ChessMate performs no automatic update request in the background.
 
 ## Windows distribution

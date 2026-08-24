@@ -223,18 +223,22 @@ fn validate_backup(backup: &PortableBackup) -> Result<(), String> {
     {
         return Err("Invalid backup metadata or limits".into());
     }
-    let mut fingerprints = HashSet::new();
+    let mut position_counts = HashMap::new();
     for game in &backup.games {
         if game.fingerprint.is_empty()
             || game.positions.len() != game.moves.len() + 1
-            || !fingerprints.insert(game.fingerprint.as_str())
+            || position_counts
+                .insert(game.fingerprint.as_str(), game.positions.len())
+                .is_some()
         {
             return Err("Invalid or duplicate game".into());
         }
     }
     for cache in &backup.analysis_caches {
-        if !fingerprints.contains(cache.game_fingerprint.as_str())
-            || !matches!(cache.profile.as_str(), "quick" | "balanced" | "deep")
+        let Some(position_count) = position_counts.get(cache.game_fingerprint.as_str()) else {
+            return Err("Analysis cache does not match a backed-up game".into());
+        };
+        if !matches!(cache.profile.as_str(), "quick" | "balanced" | "deep")
             || cache.analyzed_at.is_empty()
         {
             return Err("Analysis cache does not match a backed-up game".into());
@@ -245,6 +249,7 @@ fn validate_backup(backup: &PortableBackup) -> Result<(), String> {
                 || evaluation.engine_version != cache.engine_version
                 || evaluation.profile != cache.profile
                 || evaluation.position_index < 0
+                || evaluation.position_index as usize >= *position_count
                 || evaluation.depth < 0
             {
                 return Err("Invalid analysis evaluation".into());
@@ -502,6 +507,37 @@ mod tests {
         assert_eq!(
             validate_backup(&backup).unwrap_err(),
             "Backup contains a non-portable setting"
+        );
+    }
+
+    #[test]
+    fn rejects_out_of_range_evaluations_before_any_restore() {
+        let mut backup = empty_backup();
+        backup.games.push(sample_game());
+        backup.analysis_caches.push(BackupCache {
+            game_fingerprint: "game".into(),
+            engine_name: "Stockfish".into(),
+            engine_version: "18".into(),
+            profile: "balanced".into(),
+            analyzed_at: "2026-08-25T00:00:00Z".into(),
+            evaluations: vec![BackupEvaluation {
+                game_fingerprint: "game".into(),
+                engine_name: "Stockfish".into(),
+                engine_version: "18".into(),
+                profile: "balanced".into(),
+                position_index: 500,
+                score_cp: Some(10),
+                mate: None,
+                depth: 18,
+                best_move: Some("e2e4".into()),
+                pv: vec!["e2e4".into()],
+                analyzed_at: "2026-08-25T00:00:00Z".into(),
+            }],
+        });
+
+        assert_eq!(
+            validate_backup(&backup).unwrap_err(),
+            "Invalid analysis evaluation"
         );
     }
 

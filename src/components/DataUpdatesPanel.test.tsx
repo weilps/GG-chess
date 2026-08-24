@@ -21,12 +21,14 @@ vi.mock("../lib/data/dataFileClient", () => ({
   restorePortableBackup: mocks.restore,
   savePgnExport: mocks.exportPgn,
 }));
-vi.mock("../lib/data/updaterClient", () => ({
+vi.mock("../lib/data/updaterClient", async (importOriginal) => ({
+  ...await importOriginal<typeof import("../lib/data/updaterClient")>(),
   checkForChessMateUpdate: mocks.check,
   restartChessMate: mocks.restart,
 }));
 
 import { DataUpdatesPanel } from "./DataUpdatesPanel";
+import { UpdateError } from "../lib/data/updaterClient";
 
 describe("DataUpdatesPanel", () => {
   beforeEach(() => {
@@ -100,5 +102,29 @@ describe("DataUpdatesPanel", () => {
     await userEvent.click(screen.getByRole("button", { name: "Restart ChessMate" }));
     expect(mocks.restart).toHaveBeenCalledTimes(1);
     expect(window.confirm).toHaveBeenCalledTimes(2);
+  });
+
+  it("distinguishes an offline check without pretending an update ran", async () => {
+    mocks.check.mockRejectedValue(new UpdateError("offline"));
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach the update service/i);
+    expect(mocks.install).not.toHaveBeenCalled();
+    expect(mocks.restart).not.toHaveBeenCalled();
+  });
+
+  it("refuses invalid or missing updater signatures", async () => {
+    mocks.check.mockResolvedValue({
+      version: "0.2.0",
+      notes: "Untrusted fixture.",
+      downloadAndInstall: mocks.install.mockRejectedValue(new UpdateError("invalid")),
+      close: mocks.close.mockResolvedValue(undefined),
+    });
+    renderPanel();
+    await userEvent.click(screen.getByRole("button", { name: "Check for updates" }));
+    await userEvent.click(await screen.findByRole("button", { name: "Download and install" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent(/metadata or signature is invalid/i);
+    expect(screen.queryByRole("button", { name: "Restart ChessMate" })).not.toBeInTheDocument();
+    expect(mocks.restart).not.toHaveBeenCalled();
   });
 });

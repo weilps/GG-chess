@@ -12,6 +12,7 @@ import {
   checkForChessMateUpdate,
   restartChessMate,
   type AvailableUpdate,
+  UpdateError,
 } from "../lib/data/updaterClient";
 import type { Language, StoredGame } from "../types";
 
@@ -53,9 +54,11 @@ export function DataUpdatesPanel({
     setError(false);
     try {
       await callback();
-    } catch {
+    } catch (cause) {
       setError(true);
-      setMessage(t("dataActionError"));
+      setMessage(t(cause instanceof UpdateError
+        ? cause.code === "offline" ? "updateOffline" : "updateInvalid"
+        : "dataActionError"));
     } finally {
       setBusy(null);
     }

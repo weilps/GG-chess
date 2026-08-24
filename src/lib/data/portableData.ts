@@ -146,9 +146,9 @@ function isPortableBackup(value: unknown): value is PortableBackup {
   ) return false;
   const games = value.games;
   if (!games.every(isStoredGame)) return false;
-  const fingerprints = new Set(games.map((game) => game.fingerprint));
-  if (fingerprints.size !== games.length) return false;
-  if (!value.analysisCaches.every((cache) => isAnalysisCache(cache, fingerprints))) return false;
+  const positionCounts = new Map(games.map((game) => [game.fingerprint, game.positions.length]));
+  if (positionCounts.size !== games.length) return false;
+  if (!value.analysisCaches.every((cache) => isAnalysisCache(cache, positionCounts))) return false;
   if (!value.chessComSyncStates.every(isChessComSyncState)) return false;
   if (!value.puzzleProgress.every(isPuzzleProgress)) return false;
   if (!value.trainingActivities.every(isTrainingActivity)) return false;
@@ -180,11 +180,14 @@ function isStoredGame(value: unknown): value is StoredGame {
     && isIsoDate(value.importedAt);
 }
 
-function isAnalysisCache(value: unknown, fingerprints: Set<string>): value is StoredAnalysisCache {
+function isAnalysisCache(value: unknown, positionCounts: Map<string, number>): value is StoredAnalysisCache {
   if (!isRecord(value)) return false;
+  const positionCount = typeof value.gameFingerprint === "string"
+    ? positionCounts.get(value.gameFingerprint)
+    : undefined;
   if (
     !isBoundedString(value.gameFingerprint, 256)
-    || !fingerprints.has(value.gameFingerprint)
+    || positionCount === undefined
     || !isBoundedString(value.engineName, 256)
     || !isBoundedString(value.engineVersion, 128)
     || !["quick", "balanced", "deep"].includes(String(value.profile))
@@ -192,10 +195,16 @@ function isAnalysisCache(value: unknown, fingerprints: Set<string>): value is St
     || !Array.isArray(value.evaluations)
     || value.evaluations.length > 2_001
   ) return false;
-  return value.evaluations.every((evaluation) => isEvaluation(evaluation, value));
+  return value.evaluations.every((evaluation) => (
+    isEvaluation(evaluation, value, positionCount)
+  ));
 }
 
-function isEvaluation(value: unknown, cache: Record<string, unknown>): value is StoredPositionEvaluation {
+function isEvaluation(
+  value: unknown,
+  cache: Record<string, unknown>,
+  positionCount: number,
+): value is StoredPositionEvaluation {
   if (!isRecord(value)) return false;
   return value.gameFingerprint === cache.gameFingerprint
     && value.engineName === cache.engineName
@@ -203,6 +212,7 @@ function isEvaluation(value: unknown, cache: Record<string, unknown>): value is 
     && value.profile === cache.profile
     && Number.isInteger(value.positionIndex)
     && Number(value.positionIndex) >= 0
+    && Number(value.positionIndex) < positionCount
     && isNullableInteger(value.scoreCp)
     && isNullableInteger(value.mate)
     && Number.isInteger(value.depth)

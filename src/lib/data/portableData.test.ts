@@ -123,6 +123,23 @@ describe("portable ChessMate data", () => {
     );
   });
 
+  it("rejects an out-of-range cached position without mutating the target", async () => {
+    const backup = await buildPortableBackup(await populatedRepository(), "en", "0.1.0");
+    backup.analysisCaches[0].evaluations[0].positionIndex = 500;
+    const target = new MemoryGameRepository();
+    await target.setSetting("analysisProfile", "deep");
+    const before = {
+      games: await target.listGames(),
+      profile: await target.getSetting("analysisProfile"),
+    };
+
+    expect(() => parsePortableBackup(serializePortableBackup(backup))).toThrowError(
+      expect.objectContaining<Partial<PortableDataError>>({ code: "invalidData" }),
+    );
+    expect(await target.listGames()).toEqual(before.games);
+    expect(await target.getSetting("analysisProfile")).toBe(before.profile);
+  });
+
   it("exports a standard UTF-8 PGN archive that ChessMate can re-import", async () => {
     const repository = await populatedRepository();
     const contents = exportPgnArchive(await repository.listGames());
