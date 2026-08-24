@@ -1,5 +1,5 @@
 import { Chess } from "chess.js";
-import { render, screen } from "@testing-library/react";
+import { act, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
@@ -80,4 +80,32 @@ describe("TrainingScreen", () => {
     }]);
     expect(await repository.listTrainingActivities(weekStartMonday(new Date()))).toHaveLength(1);
   }, 15_000);
+
+  it("rolls weekly quest progress at local Monday without remounting", async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 7, 30, 23, 59, 59));
+    const repository = new MemoryGameRepository();
+    await repository.recordTrainingActivity({
+      weekStart: "2026-08-24",
+      kind: "review",
+      itemKey: "old-week-game",
+      occurredOn: "2026-08-30",
+      createdAt: "2026-08-30T12:00:00Z",
+    });
+    render(
+      <TrainingScreen
+        games={[]}
+        repository={repository}
+        onBack={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+    await act(async () => { await Promise.resolve(); });
+    expect(screen.getByText("1/3")).toBeInTheDocument();
+
+    await act(async () => { await vi.advanceTimersByTimeAsync(2_000); });
+    expect(screen.queryByText("1/3")).not.toBeInTheDocument();
+    expect(screen.getAllByText("0/3")).toHaveLength(2);
+    vi.useRealTimers();
+  });
 });

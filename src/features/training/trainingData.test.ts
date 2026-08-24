@@ -92,6 +92,15 @@ describe("training puzzles", () => {
     const invalid = cache(record);
     invalid.evaluations[0] = { ...invalid.evaluations[0], bestMove: "a1a8" };
     expect(buildTrainingPuzzles([record], [invalid])).toEqual([]);
+    const incomplete = cache(record);
+    incomplete.evaluations.splice(2, 1);
+    expect(buildTrainingPuzzles([record], [incomplete])).toEqual([]);
+    const duplicateIndex = cache(record);
+    duplicateIndex.evaluations[2] = {
+      ...duplicateIndex.evaluations[2],
+      positionIndex: 1,
+    };
+    expect(buildTrainingPuzzles([record], [duplicateIndex])).toEqual([]);
     expect(buildTrainingPuzzles([{ ...record, result: "*" }], [cache(record)])).toEqual([]);
   });
 
@@ -152,7 +161,10 @@ describe("quests, identity and summaries", () => {
       { weekStart: "2026-08-24", kind: "review", itemKey: "one", occurredOn: "2026-08-25", createdAt: "b" },
       { weekStart: "2026-08-24", kind: "review", itemKey: "two", occurredOn: "2026-08-25", createdAt: "c" },
     ];
-    expect(buildQuestProgress(activities)[0]).toMatchObject({ progress: 2, target: 3, completed: false });
+    expect(buildQuestProgress(activities, "2026-08-24")[0])
+      .toMatchObject({ progress: 2, target: 3, completed: false });
+    expect(buildQuestProgress(activities, "2026-08-31")[0])
+      .toMatchObject({ progress: 0, target: 3, completed: false });
     expect(calculateTrainingStreak(
       ["2026-08-20", "2026-08-23", "2026-08-24", "2026-08-25"],
       new Date(2026, 7, 25, 12),
@@ -184,5 +196,16 @@ describe("quests, identity and summaries", () => {
       problems: 2,
     });
     expect(buildOpeningRepertoire([{ ...first, result: "*" }], [cache(first)], aliases)).toEqual([]);
+  });
+
+  it("keeps the trend warning until both five-game windows are complete", () => {
+    const aliases = ["ada"];
+    const records = Array.from({ length: 10 }, (_, index) => (
+      game(`trend-${index}`, `2026-08-${String(20 - index).padStart(2, "0")}T00:00:00Z`)
+    ));
+    expect(buildPlayerTrends(records.slice(0, 9), records.slice(0, 9).map((item) => cache(item)), aliases)
+      .insufficientComparison).toBe(true);
+    expect(buildPlayerTrends(records, records.map((item) => cache(item)), aliases)
+      .insufficientComparison).toBe(false);
   });
 });

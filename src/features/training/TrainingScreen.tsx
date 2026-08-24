@@ -40,6 +40,7 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
   const [caches, setCaches] = useState<StoredAnalysisCache[]>([]);
   const [progress, setProgress] = useState<PuzzleProgress[]>([]);
   const [activities, setActivities] = useState<TrainingActivity[]>([]);
+  const [activeWeek, setActiveWeek] = useState(() => weekStartMonday(new Date()));
   const [trainingDays, setTrainingDays] = useState<string[]>([]);
   const [playerNames, setPlayerNames] = useState("");
   const [coachProfile, setCoachProfile] = useState<CoachProfileId>("calm");
@@ -53,10 +54,11 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
   useEffect(() => {
     let active = true;
     const now = new Date();
+    const week = weekStartMonday(now);
     Promise.all([
       repository.listAnalysisCaches(),
       repository.listPuzzleProgress(),
-      repository.listTrainingActivities(weekStartMonday(now)),
+      repository.listTrainingActivities(week),
       repository.listTrainingDays(),
       repository.getSetting(PLAYER_SETTING),
       repository.getSetting(COACH_SETTING),
@@ -66,6 +68,7 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
       setCaches(savedCaches);
       setProgress(savedProgress);
       setActivities(savedActivities);
+      setActiveWeek(week);
       setTrainingDays(days);
       setPlayerNames(names ?? chessComName ?? "");
       if (profile === "calm" || profile === "tactical" || profile === "playful") {
@@ -79,6 +82,32 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
     return () => { active = false; };
   }, [repository]);
 
+  useEffect(() => {
+    let active = true;
+    let timer: number | undefined;
+    const scheduleRollover = () => {
+      timer = window.setTimeout(async () => {
+        const week = weekStartMonday(new Date());
+        try {
+          const currentActivities = await repository.listTrainingActivities(week);
+          if (active) {
+            setActivities(currentActivities);
+            setActiveWeek(week);
+            setStorageError(false);
+          }
+        } catch {
+          if (active) setStorageError(true);
+        }
+        if (active) scheduleRollover();
+      }, millisecondsUntilNextMonday(new Date()));
+    };
+    scheduleRollover();
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+    };
+  }, [repository]);
+
   const aliases = useMemo(() => parsePlayerAliases(playerNames), [playerNames]);
   const puzzles = useMemo(() => buildTrainingPuzzles(games, caches), [caches, games]);
   const revenge = useMemo(
@@ -88,7 +117,10 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
   const currentPuzzle = revenge.find((puzzle) => puzzle.key === activePuzzleKey)
     ?? revenge[0]
     ?? null;
-  const questProgress = useMemo(() => buildQuestProgress(activities), [activities]);
+  const questProgress = useMemo(
+    () => buildQuestProgress(activities, activeWeek),
+    [activeWeek, activities],
+  );
   const trends = useMemo(
     () => buildPlayerTrends(games, caches, aliases),
     [aliases, caches, games],
@@ -150,6 +182,7 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
   }
 
   function mergeActivity(activity: TrainingActivity) {
+    setActiveWeek(activity.weekStart);
     setActivities((items) => items.some((item) => (
       item.weekStart === activity.weekStart
       && item.kind === activity.kind
@@ -248,6 +281,14 @@ export function TrainingScreen({ games, repository, onBack, t }: TrainingScreenP
       <p className="training-disclaimer">{t("trainingDisclaimer")}</p>
     </main>
   );
+}
+
+function millisecondsUntilNextMonday(now: Date): number {
+  const next = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  const daysUntilMonday = ((8 - now.getDay()) % 7) || 7;
+  next.setDate(next.getDate() + daysUntilMonday);
+  next.setHours(0, 0, 0, 0);
+  return Math.max(1, next.getTime() - now.getTime());
 }
 
 function WeeklyQuests({

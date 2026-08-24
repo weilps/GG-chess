@@ -140,7 +140,11 @@ export function buildTrainingPuzzles(
   const puzzles: TrainingPuzzle[] = [];
   for (const cache of caches) {
     const game = gamesByFingerprint.get(cache.gameFingerprint);
-    if (!game || !["1-0", "0-1", "1/2-1/2"].includes(game.result)) continue;
+    if (
+      !game
+      || !["1-0", "0-1", "1/2-1/2"].includes(game.result)
+      || !isCompleteAnalysisCache(game, cache)
+    ) continue;
     const evaluations = new Map(
       cache.evaluations.map((evaluation) => [evaluation.positionIndex, evaluation]),
     );
@@ -294,7 +298,10 @@ export function makeTrainingActivity(
   };
 }
 
-export function buildQuestProgress(activities: TrainingActivity[]): QuestProgress[] {
+export function buildQuestProgress(
+  activities: TrainingActivity[],
+  activeWeek: string,
+): QuestProgress[] {
   const targets: Record<TrainingActivityKind, number> = {
     review: 3,
     puzzle: 5,
@@ -302,7 +309,9 @@ export function buildQuestProgress(activities: TrainingActivity[]): QuestProgres
   };
   return (["review", "puzzle", "opening"] as const).map((kind) => {
     const progress = new Set(
-      activities.filter((activity) => activity.kind === kind).map((activity) => activity.itemKey),
+      activities
+        .filter((activity) => activity.weekStart === activeWeek && activity.kind === kind)
+        .map((activity) => activity.itemKey),
     ).size;
     return { kind, progress, target: targets[kind], completed: progress >= targets[kind] };
   });
@@ -340,7 +349,7 @@ export function buildPlayerTrends(
   return {
     recent: summarizeTrend(recent),
     previous: summarizeTrend(previous),
-    insufficientComparison: recent.length === 0 || previous.length === 0,
+    insufficientComparison: recent.length < 5 || previous.length < 5,
   };
 }
 
@@ -411,6 +420,28 @@ function latestCacheByGame(caches: StoredAnalysisCache[]): Map<string, StoredAna
     }
   }
   return latest;
+}
+
+function isCompleteAnalysisCache(
+  game: StoredGame,
+  cache: StoredAnalysisCache,
+): boolean {
+  if (game.positions.length !== game.moves.length + 1) return false;
+  if (cache.evaluations.length !== game.positions.length) return false;
+  const indexes = new Set<number>();
+  for (const evaluation of cache.evaluations) {
+    if (
+      evaluation.gameFingerprint !== cache.gameFingerprint
+      || evaluation.engineName !== cache.engineName
+      || evaluation.engineVersion !== cache.engineVersion
+      || evaluation.profile !== cache.profile
+      || evaluation.positionIndex < 0
+      || evaluation.positionIndex >= game.positions.length
+      || indexes.has(evaluation.positionIndex)
+    ) return false;
+    indexes.add(evaluation.positionIndex);
+  }
+  return indexes.size === game.positions.length;
 }
 
 function summarizeTrend(facts: PlayerGameFacts[]): TrendWindow {
