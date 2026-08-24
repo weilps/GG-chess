@@ -135,11 +135,11 @@ describe("EnginePanel", () => {
       />,
     );
     expect(await screen.findByText("+0.35")).toBeInTheDocument();
-    expect(onAnalysisStateChange).toHaveBeenCalledWith(expect.objectContaining({
+    await waitFor(() => expect(onAnalysisStateChange).toHaveBeenCalledWith(expect.objectContaining({
       evaluations: [expect.objectContaining({ scoreCp: 35 })],
       loading: false,
       profile: "balanced",
-    }));
+    })));
     fireEvent.change(screen.getByLabelText("Analysis profile"), { target: { value: "deep" } });
 
     const analyzeButton = screen.getByRole("button", { name: "Analyze" });
@@ -165,5 +165,46 @@ describe("EnginePanel", () => {
       loading: false,
       profile: "deep",
     }));
+  });
+
+  it.each([
+    [0, "Analyze"],
+    [1, "Resume analysis"],
+    [2, "Re-analyze"],
+  ] as const)("invalidates adviser facts synchronously when %s cached positions use %s", async (cachedCount, action) => {
+    const repository = new MemoryGameRepository();
+    const onAnalysisStateChange = vi.fn();
+    const cached: PositionEvaluation[] = [
+      { positionIndex: 0, scoreCp: 35, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4"] },
+      { positionIndex: 1, scoreCp: 20, mate: null, depth: 18, bestMove: null, pv: [] },
+    ].slice(0, cachedCount);
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", cached);
+    mocks.analyzePositions.mockImplementation(() => new Promise(() => undefined));
+
+    render(
+      <EnginePanel
+        game={game}
+        positionIndex={0}
+        repository={repository}
+        t={t}
+        onAnalysisStateChange={onAnalysisStateChange}
+      />,
+    );
+    const button = await screen.findByRole("button", { name: action });
+    await waitFor(() => expect(button).toBeEnabled());
+    onAnalysisStateChange.mockClear();
+    fireEvent.click(button);
+
+    expect(onAnalysisStateChange).toHaveBeenCalledWith({
+      cacheKey: null,
+      evaluations: [],
+      loading: true,
+      profile: "balanced",
+    });
+    await waitFor(() => expect(onAnalysisStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      loading: true,
+      profile: "balanced",
+    })));
+    expect(onAnalysisStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
   });
 });

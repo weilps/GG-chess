@@ -52,6 +52,7 @@ function localizedEngineError(code: string): TranslationKey {
   if (code.includes("exited") || code.includes("start_failed")) return "engineErrorExited";
   if (code.includes("malformed")) return "engineErrorMalformed";
   if (code.includes("timeout")) return "engineErrorTimeout";
+  if (code.includes("cache")) return "engineErrorCache";
   return "engineErrorUnknown";
 }
 
@@ -201,26 +202,32 @@ export function EnginePanel({
     setErrorKey(null);
     setIsAnalyzing(true);
     setIsCancelling(false);
-    let baseline = evaluations;
-    if (replace) {
-      await repository.clearAnalysis(game.fingerprint, engine, profileId);
-      baseline = [];
-      setEvaluationCache({ key: activeCacheKey, values: [], loading: false });
-    }
-    const present = new Set(baseline.map((evaluation) => evaluation.positionIndex));
-    const positionIndexes = game.positions
-      .map((_, index) => index)
-      .filter((index) => !present.has(index));
-    if (positionIndexes.length === 0) {
-      setIsAnalyzing(false);
-      return;
-    }
-
-    const analysisId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-    analysisIdRef.current = analysisId;
-    setProgress({ current: 0, total: positionIndexes.length });
+    const baseline = replace ? [] : evaluations;
+    onAnalysisStateChange?.({
+      cacheKey: null,
+      evaluations: [],
+      loading: true,
+      profile: profileId,
+    });
+    setEvaluationCache({ key: activeCacheKey, values: baseline, loading: true });
     let unsubscribe: () => void = () => undefined;
     try {
+      if (replace) {
+        try {
+          await repository.clearAnalysis(game.fingerprint, engine, profileId);
+        } catch {
+          throw new Error("engine_cache");
+        }
+      }
+      const present = new Set(baseline.map((evaluation) => evaluation.positionIndex));
+      const positionIndexes = game.positions
+        .map((_, index) => index)
+        .filter((index) => !present.has(index));
+      if (positionIndexes.length === 0) return;
+
+      const analysisId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+      analysisIdRef.current = analysisId;
+      setProgress({ current: 0, total: positionIndexes.length });
       unsubscribe = await subscribeToAnalysisProgress((update) => {
         if (update.analysisId !== analysisId) return;
         setProgress({ current: update.current, total: update.total });
@@ -251,11 +258,14 @@ export function EnginePanel({
     } finally {
       unsubscribe();
       analysisIdRef.current = null;
+      setEvaluationCache((current) => current.key === activeCacheKey
+        ? { ...current, loading: false }
+        : current);
       setIsAnalyzing(false);
       setIsCancelling(false);
       setProgress(null);
     }
-  }, [activeCacheKey, engine, evaluations, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, profile.depth, profileId, repository]);
+  }, [activeCacheKey, engine, evaluations, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, onAnalysisStateChange, profile.depth, profileId, repository]);
 
   const stopAnalysis = useCallback(async () => {
     if (!analysisIdRef.current) return;
