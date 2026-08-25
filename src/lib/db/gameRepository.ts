@@ -1,5 +1,6 @@
-import { isTauri } from "@tauri-apps/api/core";
+import { invoke, isTauri } from "@tauri-apps/api/core";
 import Database from "@tauri-apps/plugin-sql";
+import type { PortableBackup, RestoreSummary } from "../data/portableData";
 import type {
   AnalysisProfileId,
   EngineInfo,
@@ -60,13 +61,16 @@ export interface GameRepository {
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
   listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]>;
+  listAllChessComSyncStates(): Promise<ChessComMonthSyncState[]>;
   saveChessComSyncState(state: ChessComMonthSyncState): Promise<void>;
   listAnalysisCaches(): Promise<StoredAnalysisCache[]>;
   listPuzzleProgress(): Promise<PuzzleProgress[]>;
   savePuzzleProgress(progress: PuzzleProgress): Promise<void>;
   recordTrainingActivity(activity: TrainingActivity): Promise<void>;
   listTrainingActivities(weekStart: string): Promise<TrainingActivity[]>;
+  listAllTrainingActivities(): Promise<TrainingActivity[]>;
   listTrainingDays(): Promise<string[]>;
+  restorePortableData(backup: PortableBackup): Promise<RestoreSummary>;
   getAnalysis(
     gameFingerprint: string,
     engine: EngineInfo,
@@ -145,6 +149,12 @@ export class MemoryGameRepository implements GameRepository {
       .sort((left, right) => left.yearMonth.localeCompare(right.yearMonth));
   }
 
+  async listAllChessComSyncStates(): Promise<ChessComMonthSyncState[]> {
+    return [...this.chessComSyncStates.values()]
+      .sort((left, right) => left.username.localeCompare(right.username)
+        || left.yearMonth.localeCompare(right.yearMonth));
+  }
+
   async saveChessComSyncState(state: ChessComMonthSyncState): Promise<void> {
     this.chessComSyncStates.set(`${state.username}\u0000${state.yearMonth}`, { ...state });
   }
@@ -174,8 +184,70 @@ export class MemoryGameRepository implements GameRepository {
       .filter((activity) => activity.weekStart === weekStart);
   }
 
+  async listAllTrainingActivities(): Promise<TrainingActivity[]> {
+    return [...this.trainingActivities.values()]
+      .sort((left, right) => left.createdAt.localeCompare(right.createdAt));
+  }
+
   async listTrainingDays(): Promise<string[]> {
     return [...this.trainingDays].sort();
+  }
+
+  async restorePortableData(backup: PortableBackup): Promise<RestoreSummary> {
+    const summary: RestoreSummary = { added: 0, updated: 0, unchanged: 0, rejected: 0 };
+    for (const game of backup.games) {
+      mergeMemoryRecord(this.games, game.fingerprint, game, game.importedAt, summary);
+    }
+    for (const cache of backup.analysisCaches) {
+      for (const evaluation of cache.evaluations) {
+        const key = [
+          evaluation.gameFingerprint,
+          evaluation.engineName,
+          evaluation.engineVersion,
+          evaluation.profile,
+          evaluation.positionIndex,
+        ].join("\u0000");
+        mergeMemoryRecord(this.evaluations, key, evaluation, evaluation.analyzedAt, summary);
+      }
+    }
+    for (const state of backup.chessComSyncStates) {
+      mergeMemoryRecord(
+        this.chessComSyncStates,
+        `${state.username}\u0000${state.yearMonth}`,
+        state,
+        state.checkedAt,
+        summary,
+      );
+    }
+    for (const item of backup.puzzleProgress) {
+      mergeMemoryRecord(this.puzzleProgress, item.puzzleKey, item, item.updatedAt, summary);
+    }
+    for (const activity of backup.trainingActivities) {
+      const key = `${activity.weekStart}\u0000${activity.kind}\u0000${activity.itemKey}`;
+      if (this.trainingActivities.has(key)) summary.unchanged += 1;
+      else {
+        this.trainingActivities.set(key, { ...activity });
+        summary.added += 1;
+      }
+    }
+    for (const day of backup.trainingDays) {
+      if (this.trainingDays.has(day)) summary.unchanged += 1;
+      else {
+        this.trainingDays.add(day);
+        summary.added += 1;
+      }
+    }
+    for (const [key, value] of Object.entries(backup.settings)) {
+      if (this.settings.get(key) === value) summary.unchanged += 1;
+      else if (this.settings.has(key)) {
+        this.settings.set(key, value);
+        summary.updated += 1;
+      } else {
+        this.settings.set(key, value);
+        summary.added += 1;
+      }
+    }
+    return summary;
   }
 
   async getAnalysis(
@@ -237,6 +309,40 @@ function analysisKey(
   positionIndex: number,
 ): string {
   return [gameFingerprint, engine.name, engine.version, profile, positionIndex].join("\u0000");
+}
+
+function mergeMemoryRecord<T extends object>(
+  records: Map<string, T>,
+  key: string,
+  incoming: T,
+  incomingTimestamp: string,
+  summary: RestoreSummary,
+): void {
+  const existing = records.get(key);
+  if (!existing) {
+    records.set(key, { ...incoming });
+    summary.added += 1;
+    return;
+  }
+  if (JSON.stringify(existing) === JSON.stringify(incoming)) {
+    summary.unchanged += 1;
+    return;
+  }
+  const existingTimestamp = "updatedAt" in existing
+    ? String(existing.updatedAt)
+    : "checkedAt" in existing
+      ? String(existing.checkedAt)
+      : "analyzedAt" in existing
+        ? String(existing.analyzedAt)
+        : "importedAt" in existing
+          ? String(existing.importedAt)
+          : "";
+  if (incomingTimestamp > existingTimestamp) {
+    records.set(key, { ...incoming });
+    summary.updated += 1;
+  } else {
+    summary.unchanged += 1;
+  }
 }
 
 interface GameRow {
@@ -461,6 +567,20 @@ export class SqliteGameRepository implements GameRepository {
     }));
   }
 
+  async listAllChessComSyncStates(): Promise<ChessComMonthSyncState[]> {
+    const rows = await this.requireDatabase().select<ChessComSyncRow[]>(`
+      SELECT * FROM chess_com_sync_months ORDER BY username, year_month
+    `);
+    return rows.map((row) => ({
+      username: row.username,
+      yearMonth: row.year_month,
+      etag: row.etag,
+      lastModified: row.last_modified,
+      completedAt: row.completed_at,
+      checkedAt: row.checked_at,
+    }));
+  }
+
   async addGames(games: ParsedGame[]): Promise<AddGamesResult> {
     const database = this.requireDatabase();
     let added = 0;
@@ -630,11 +750,28 @@ export class SqliteGameRepository implements GameRepository {
     }));
   }
 
+  async listAllTrainingActivities(): Promise<TrainingActivity[]> {
+    const rows = await this.requireDatabase().select<TrainingActivityRow[]>(`
+      SELECT * FROM training_activities ORDER BY created_at ASC
+    `);
+    return rows.map((row) => ({
+      weekStart: row.week_start,
+      kind: row.kind,
+      itemKey: row.item_key,
+      occurredOn: row.occurred_on,
+      createdAt: row.created_at,
+    }));
+  }
+
   async listTrainingDays(): Promise<string[]> {
     const rows = await this.requireDatabase().select<Array<{ day: string }>>(
       "SELECT day FROM training_days ORDER BY day ASC",
     );
     return rows.map((row) => row.day);
+  }
+
+  async restorePortableData(backup: PortableBackup): Promise<RestoreSummary> {
+    return invoke<RestoreSummary>("restore_portable_backup", { backup });
   }
 
   async getAnalysis(

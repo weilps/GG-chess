@@ -118,7 +118,19 @@ export default function App() {
         </div>
       )}
       {importSummary && <ImportResultDialog summary={importSummary} onClose={() => setImportSummary(null)} t={t} />}
-      {showAbout && <AboutDialog onClose={() => setShowAbout(false)} t={t} />}
+      {showAbout && (
+        <AboutDialog
+          games={games}
+          repository={repository}
+          language={language}
+          onRestored={async (restoredLanguage) => {
+            if (restoredLanguage) setLanguage(restoredLanguage);
+            await refreshGames();
+          }}
+          onClose={() => setShowAbout(false)}
+          t={t}
+        />
+      )}
     </div>
   );
 }

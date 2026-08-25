@@ -6,8 +6,11 @@
   "permissions": [
     "core:default",
     "dialog:allow-open",
+    "dialog:allow-save",
+    "process:default",
     "sql:default",
     "sql:allow-execute",
-    "sql:allow-select"
+    "sql:allow-select",
+    "updater:default"
   ]
 }

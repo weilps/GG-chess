@@ -24,9 +24,19 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
+      - run: npm run licenses:check
+      - run: npm run release:preflight -- --tag v0.1.0
+      - name: Validate GitHub workflows
+        shell: pwsh
+        run: ./scripts/check-workflows.ps1
+      - name: Scan tracked history for secrets
+        shell: pwsh
+        run: ./scripts/check-secrets.ps1
       - name: Check Rust formatting
         run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
       - name: Test Rust engine layer
         run: cargo test --manifest-path src-tauri/Cargo.toml
       - name: Verify Tauri and Rust
         run: npm run tauri build -- --debug --no-bundle
+      - name: Build unsigned development NSIS installer
+        run: npm run tauri build -- --debug --bundles nsis --config src-tauri/tauri.quality.conf.json

@@ -2,6 +2,7 @@ use std::{fs, path::PathBuf};
 
 mod chess_com;
 mod codex;
+mod data_files;
 mod engine;
 
 const MAX_PGN_BYTES: u64 = 50 * 1024 * 1024;
@@ -41,9 +42,15 @@ pub fn run() {
         .manage(codex::CodexState::default())
         .manage(engine::EngineState::default())
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
         .plugin(tauri_plugin_sql::Builder::default().build())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .invoke_handler(tauri::generate_handler![
             read_pgn_file,
+            data_files::read_backup_file,
+            data_files::write_backup_file,
+            data_files::write_pgn_export,
+            data_files::restore_portable_backup,
             engine::detect_stockfish,
             engine::validate_engine,
             engine::analyze_game,

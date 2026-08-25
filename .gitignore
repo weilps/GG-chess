@@ -8,6 +8,7 @@ src-tauri/target/
 .env
 .env.*
 !.env.example
+.local/
 
 # Editors and operating systems
 .idea/

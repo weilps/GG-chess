@@ -1,0 +1,202 @@
+name: release-windows
+
+on:
+  push:
+    tags: ["v*.*.*"]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Stable tag matching every project version (vX.Y.Z)
+        required: true
+        type: string
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-windows
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-latest
+    timeout-minutes: 60
+    env:
+      RELEASE_TAG: ${{ github.event_name == 'workflow_dispatch' && inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          ref: ${{ env.RELEASE_TAG }}
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+      - name: Prove tag provenance
+        shell: pwsh
+        run: |
+          $tagCommit = git rev-list -n 1 --verify $env:RELEASE_TAG
+          if ($LASTEXITCODE -ne 0 -or -not $tagCommit) { throw "Release tag does not exist" }
+          $checkedOutCommit = git rev-parse HEAD
+          if ($tagCommit.Trim() -ne $checkedOutCommit.Trim()) {
+            throw "Checked-out commit does not match $env:RELEASE_TAG"
+          }
+      - name: Verify tag, versions and release configuration
+        run: npm run release:preflight -- --tag $env:RELEASE_TAG
+      - name: Require both signing identities
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          $required = @(
+            "WINDOWS_CERTIFICATE_PFX_BASE64",
+            "WINDOWS_CERTIFICATE_PASSWORD",
+            "TAURI_SIGNING_PRIVATE_KEY",
+            "TAURI_SIGNING_PRIVATE_KEY_PASSWORD"
+          )
+          foreach ($name in $required) {
+            if ([string]::IsNullOrWhiteSpace([Environment]::GetEnvironmentVariable($name))) {
+              throw "Required release secret $name is missing"
+            }
+          }
+
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run licenses:check
+      - name: Validate GitHub workflows
+        shell: pwsh
+        run: ./scripts/check-workflows.ps1
+      - name: Scan release history for secrets
+        shell: pwsh
+        run: ./scripts/check-secrets.ps1
+      - name: Check Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+      - name: Test Rust layer
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+
+      - name: Import trusted Authenticode certificate
+        id: certificate
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE_PFX_BASE64: ${{ secrets.WINDOWS_CERTIFICATE_PFX_BASE64 }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+        run: |
+          $pfxPath = Join-Path $env:RUNNER_TEMP "chessmate-release.pfx"
+          [IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:WINDOWS_CERTIFICATE_PFX_BASE64))
+          $password = ConvertTo-SecureString $env:WINDOWS_CERTIFICATE_PASSWORD -AsPlainText -Force
+          $certificate = Import-PfxCertificate -FilePath $pfxPath -CertStoreLocation Cert:\CurrentUser\My -Password $password
+          if (-not $certificate.HasPrivateKey) { throw "Authenticode certificate has no private key" }
+          $codeSigningOid = "1.3.6.1.5.5.7.3.3"
+          if (-not ($certificate.EnhancedKeyUsageList.ObjectId.Value -contains $codeSigningOid)) {
+            throw "Certificate is not valid for code signing"
+          }
+          if ($certificate.NotAfter -le (Get-Date).ToUniversalTime()) { throw "Code-signing certificate is expired" }
+          "thumbprint=$($certificate.Thumbprint)" >> $env:GITHUB_OUTPUT
+
+      - name: Create signed release overlay
+        shell: pwsh
+        env:
+          CERTIFICATE_THUMBPRINT: ${{ steps.certificate.outputs.thumbprint }}
+        run: |
+          $config = @{
+            bundle = @{
+              windows = @{
+                certificateThumbprint = $env:CERTIFICATE_THUMBPRINT
+                digestAlgorithm = "sha256"
+                timestampUrl = "http://timestamp.digicert.com"
+              }
+            }
+          }
+          $config | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $env:RUNNER_TEMP "release-config.json") -Encoding UTF8
+
+      - name: Build and upload a private draft release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        with:
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: ChessMate __VERSION__
+          releaseBody: Signed Windows x64 release. See THIRD_PARTY_NOTICES.md for dependency licenses.
+          releaseDraft: true
+          prerelease: false
+          args: --bundles nsis --config "${{ runner.temp }}\release-config.json"
+
+      - name: Verify signatures and updater artifacts
+        id: artifacts
+        shell: pwsh
+        run: |
+          $application = Resolve-Path "src-tauri\target\release\chessmate.exe"
+          $installer = Get-ChildItem "src-tauri\target\release\bundle\nsis" -Filter "*.exe" | Select-Object -First 1
+          $updaterSignature = if ($installer) { Get-Item "$($installer.FullName).sig" -ErrorAction SilentlyContinue }
+          if (-not $installer -or -not $updaterSignature) {
+            throw "Installer or signed updater artifact is missing"
+          }
+          foreach ($file in @($application.Path, $installer.FullName)) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file
+            if ($signature.Status -ne "Valid") { throw "Invalid Authenticode signature on $file: $($signature.Status)" }
+            if (-not $signature.TimeStamperCertificate) { throw "Missing trusted timestamp on $file" }
+          }
+          $signtool = Get-ChildItem "${env:ProgramFiles(x86)}\Windows Kits\10\bin" -Filter signtool.exe -Recurse |
+            Where-Object FullName -Match "\\x64\\signtool.exe$" |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+          if (-not $signtool) { throw "signtool.exe not found" }
+          & $signtool.FullName verify /pa /all /v $application.Path
+          if ($LASTEXITCODE -ne 0) { throw "signtool rejected ChessMate.exe" }
+          & $signtool.FullName verify /pa /all /v $installer.FullName
+          if ($LASTEXITCODE -ne 0) { throw "signtool rejected the installer" }
+          "installer=$($installer.FullName)" >> $env:GITHUB_OUTPUT
+          "bundle_dir=$($installer.DirectoryName)" >> $env:GITHUB_OUTPUT
+
+      - name: Smoke install, launch, reinstall and uninstall
+        shell: pwsh
+        run: ./scripts/windows-installer-smoke.ps1 -InstallerPath '${{ steps.artifacts.outputs.installer }}'
+
+      - name: Generate SPDX SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./src-tauri/target/release
+          format: spdx-json
+          output-file: chessmate-sbom.spdx.json
+          upload-artifact: false
+
+      - name: Verify update manifest and attach release metadata
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $manifestDirectory = Join-Path $env:RUNNER_TEMP "manifest"
+          New-Item -ItemType Directory -Path $manifestDirectory | Out-Null
+          gh release download $env:RELEASE_TAG --pattern latest.json --dir $manifestDirectory
+          $manifest = Get-Content (Join-Path $manifestDirectory "latest.json") -Raw | ConvertFrom-Json
+          if ($manifest.version -ne $env:RELEASE_TAG.TrimStart("v")) { throw "latest.json version does not match the tag" }
+          $platform = $manifest.platforms."windows-x86_64"
+          if (-not $platform.signature -or $platform.url -notmatch [regex]::Escape("/releases/download/$env:RELEASE_TAG/")) {
+            throw "latest.json does not reference the signed tag artifact"
+          }
+          $bundleFiles = Get-ChildItem '${{ steps.artifacts.outputs.bundle_dir }}' -File
+          $checksums = foreach ($file in $bundleFiles) {
+            $hash = Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256
+            "$($hash.Hash.ToLowerInvariant())  $($file.Name)"
+          }
+          $checksums | Set-Content -LiteralPath "SHA256SUMS.txt" -Encoding ascii
+          gh release upload $env:RELEASE_TAG SHA256SUMS.txt chessmate-sbom.spdx.json LICENSE THIRD_PARTY_NOTICES.md --clobber
+
+      - name: Publish only after every gate passed
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: gh release edit $env:RELEASE_TAG --draft=false --latest

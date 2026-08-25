@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"ChessMate desktop permissions","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","sql:default","sql:allow-execute","sql:allow-select"]}}
+{"default":{"identifier":"default","description":"ChessMate desktop permissions","local":true,"windows":["main"],"permissions":["core:default","dialog:allow-open","dialog:allow-save","process:default","sql:default","sql:allow-execute","sql:allow-select","updater:default"]}}
