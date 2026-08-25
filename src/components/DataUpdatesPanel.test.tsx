@@ -113,6 +113,27 @@ describe("DataUpdatesPanel", () => {
     expect(mocks.restart).not.toHaveBeenCalled();
   });
 
+  it("removes a stale install action before an offline re-check", async () => {
+    mocks.check
+      .mockResolvedValueOnce({
+        version: "0.2.0",
+        notes: "Initially available.",
+        downloadAndInstall: mocks.install,
+        close: mocks.close.mockResolvedValue(undefined),
+      })
+      .mockRejectedValueOnce(new UpdateError("offline"));
+    renderPanel();
+    const checkButton = screen.getByRole("button", { name: "Check for updates" });
+    await userEvent.click(checkButton);
+    expect(await screen.findByRole("button", { name: "Download and install" })).toBeInTheDocument();
+
+    await userEvent.click(checkButton);
+    expect(await screen.findByRole("alert")).toHaveTextContent(/could not reach the update service/i);
+    expect(screen.queryByRole("button", { name: "Download and install" })).not.toBeInTheDocument();
+    expect(mocks.close).toHaveBeenCalledTimes(1);
+    expect(mocks.install).not.toHaveBeenCalled();
+  });
+
   it("refuses invalid or missing updater signatures", async () => {
     mocks.check.mockResolvedValue({
       version: "0.2.0",

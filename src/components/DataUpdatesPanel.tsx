@@ -1,5 +1,5 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { TranslationKey } from "../i18n/translations";
 import type { GameRepository } from "../lib/db/gameRepository";
 import {
@@ -37,6 +37,7 @@ export function DataUpdatesPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState(false);
   const [availableUpdate, setAvailableUpdate] = useState<AvailableUpdate | null>(null);
+  const availableUpdateRef = useRef<AvailableUpdate | null>(null);
   const [updateProgress, setUpdateProgress] = useState<string | null>(null);
   const [updateInstalled, setUpdateInstalled] = useState(false);
 
@@ -45,8 +46,8 @@ export function DataUpdatesPanel({
   }, []);
 
   useEffect(() => () => {
-    void availableUpdate?.close().catch(() => undefined);
-  }, [availableUpdate]);
+    void availableUpdateRef.current?.close().catch(() => undefined);
+  }, []);
 
   async function run(action: string, callback: () => Promise<void>) {
     setBusy(action);
@@ -97,11 +98,15 @@ export function DataUpdatesPanel({
 
   function checkForUpdates() {
     void run("check", async () => {
-      await availableUpdate?.close();
-      const update = await checkForChessMateUpdate();
-      setAvailableUpdate(update);
+      const previousUpdate = availableUpdateRef.current;
+      availableUpdateRef.current = null;
+      setAvailableUpdate(null);
       setUpdateInstalled(false);
       setUpdateProgress(null);
+      await previousUpdate?.close();
+      const update = await checkForChessMateUpdate();
+      availableUpdateRef.current = update;
+      setAvailableUpdate(update);
       setMessage(update
         ? t("updateAvailable", { version: update.version })
         : t("updateCurrent"));
