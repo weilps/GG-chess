@@ -13,6 +13,7 @@ const CONSENT_SETTING = "codexAdvisorEnabled";
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 type ConsentState = "loading" | "enabled" | "disabled";
+export type CodexAdviceSection = "explanation" | "planPractice";
 
 function errorTranslation(code: string): TranslationKey {
   if (code.includes("cli_missing")) return "codexErrorMissing";
@@ -29,12 +30,16 @@ export function CodexAdvisorPanel({
   t,
   available = codexAdviserAvailable(),
   requestAdvice = requestCodexAdvice,
+  embedded = false,
+  activeSection = "explanation",
 }: {
   request: CodexAdviceRequest | null;
   repository: GameRepository;
   t: Translate;
   available?: boolean;
   requestAdvice?: (input: CodexAdviceRequest) => Promise<CodexAdviceResponse>;
+  embedded?: boolean;
+  activeSection?: CodexAdviceSection;
 }) {
   const [consent, setConsent] = useState<ConsentState>("loading");
   const [showConsent, setShowConsent] = useState(false);
@@ -97,8 +102,8 @@ export function CodexAdvisorPanel({
     }
   }, [available, consent, request, requestAdvice]);
 
-  return (
-    <section className="codex-adviser" aria-label={t("codexAdviser")}>
+  const content = (
+    <>
       <div className="codex-adviser-heading">
         <div>
           <span className="eyebrow">{t("codexAdviser")}</span>
@@ -124,11 +129,19 @@ export function CodexAdvisorPanel({
           </div>
         </div>
       ) : response ? (
-        <div className="codex-answer" aria-live="polite">
-          <section><h3>{t("codexSummary")}</h3><p>{response.advice.summary}</p></section>
-          <section><h3>{t("codexExplanation")}</h3><p>{response.advice.explanation}</p></section>
-          <section><h3>{t("codexPlan")}</h3><p>{response.advice.plan}</p></section>
-          <section><h3>{t("codexPractice")}</h3><p>{response.advice.practice}</p></section>
+        <div className={`codex-answer${embedded ? " codex-answer-embedded" : ""}`} aria-live="polite">
+          {(!embedded || activeSection === "explanation") && (
+            <>
+              <section><h3>{t("codexSummary")}</h3><p>{response.advice.summary}</p></section>
+              <section><h3>{t("codexExplanation")}</h3><p>{response.advice.explanation}</p></section>
+            </>
+          )}
+          {(!embedded || activeSection === "planPractice") && (
+            <>
+              <section><h3>{t("codexPlan")}</h3><p>{response.advice.plan}</p></section>
+              <section><h3>{t("codexPractice")}</h3><p>{response.advice.practice}</p></section>
+            </>
+          )}
           <div className="codex-answer-meta">
             <span>{response.model}</span>
             <span>{response.reasoning}</span>
@@ -147,6 +160,12 @@ export function CodexAdvisorPanel({
       )}
 
       <small className="codex-bridge-note">{t("codexBridgeNote")}</small>
-    </section>
+    </>
+  );
+
+  return embedded ? (
+    <div className="codex-adviser codex-adviser-embedded">{content}</div>
+  ) : (
+    <section className="codex-adviser" aria-label={t("codexAdviser")}>{content}</section>
   );
 }
