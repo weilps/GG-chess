@@ -26,6 +26,7 @@ vi.mock("../engine/EnginePanel", async () => {
   const snapshot: AnalysisSnapshot = {
     cacheKey: "review\u0000Stockfish 18\u000018\u0000balanced",
     profile: "balanced",
+    engineStatus: "ready",
     loading: false,
     evaluations: [
       { positionIndex: 0, scoreCp: 100, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4", "e7e5"] },
@@ -42,6 +43,7 @@ vi.mock("../engine/EnginePanel", async () => {
         <button onClick={() => onAnalysisStateChange?.({
           cacheKey: null,
           profile: "deep",
+          engineStatus: "ready",
           loading: true,
           evaluations: [],
         })}>

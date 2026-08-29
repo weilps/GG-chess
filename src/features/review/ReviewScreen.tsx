@@ -78,6 +78,7 @@ export function ReviewScreen({
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot>({
     cacheKey: null,
     evaluations: [],
+    engineStatus: "loading",
     loading: true,
     profile: "balanced",
   });
@@ -148,10 +149,13 @@ export function ReviewScreen({
   const accuracy = useMemo(() => calculateGameAccuracy(moveRatings), [moveRatings]);
   const selectedRating = positionIndex > 0 ? moveRatings[positionIndex - 1] ?? null : null;
   const coachInsight = useMemo(
-    () => isCompletedGame && selectedRating && !analysisSnapshot.loading
+    () => isCompletedGame
+      && selectedRating
+      && analysisSnapshot.engineStatus === "ready"
+      && !analysisSnapshot.loading
       ? buildCoachInsight(game, selectedRating, activeEvaluations)
       : null,
-    [activeEvaluations, analysisSnapshot.loading, game, isCompletedGame, selectedRating],
+    [activeEvaluations, analysisSnapshot.engineStatus, analysisSnapshot.loading, game, isCompletedGame, selectedRating],
   );
   const codexRequest = useMemo(
     () => buildCodexAdviceRequest(game, coachInsight, language),
@@ -164,9 +168,13 @@ export function ReviewScreen({
     ? "unfinishedGame"
     : positionIndex === 0
       ? "startingPosition"
-      : analysisSnapshot.loading
-        ? "analysisLoading"
-        : "selectMove";
+      : analysisSnapshot.engineStatus === "loading"
+        ? "engineLoading"
+        : analysisSnapshot.engineStatus === "missing" || analysisSnapshot.engineStatus === "error"
+          ? "stockfishUnavailable"
+          : analysisSnapshot.loading
+            ? "analysisLoading"
+            : "selectMove";
 
   const goTo = (next: number) =>
     setPositionIndex(Math.min(lastPositionIndex, Math.max(0, next)));

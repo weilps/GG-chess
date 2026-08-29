@@ -98,13 +98,30 @@ describe("CoachPanel", () => {
     expect(panel).toHaveTextContent("ni généré par IA");
   });
 
-  it("distinguishes selection and unfinished-game states", () => {
+  it("distinguishes selection, starting, loading, unavailable-engine, and unfinished states", () => {
+    const repository = new MemoryGameRepository();
     const { rerender } = render(
-      <CoachPanel insight={null} repository={new MemoryGameRepository()} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
+      <CoachPanel insight={null} repository={repository} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
     );
     expect(screen.getByText("Select a move to see its coaching insight.")).toBeInTheDocument();
     rerender(
-      <CoachPanel insight={null} emptyState="unfinishedGame" repository={new MemoryGameRepository()} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
+      <CoachPanel insight={null} emptyState="startingPosition" repository={repository} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
+    );
+    expect(screen.getByText("Choose a played move to start the review.")).toBeInTheDocument();
+    rerender(
+      <CoachPanel insight={null} emptyState="engineLoading" repository={repository} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
+    );
+    expect(screen.getByText("Looking for a local Stockfish engine.")).toBeInTheDocument();
+    rerender(
+      <CoachPanel insight={null} emptyState="analysisLoading" repository={repository} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
+    );
+    expect(screen.getByText("Stockfish is analyzing this game.")).toBeInTheDocument();
+    rerender(
+      <CoachPanel insight={null} emptyState="stockfishUnavailable" repository={repository} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
+    );
+    expect(screen.getByText("Stockfish is unavailable. Open Analysis settings to choose an engine.")).toBeInTheDocument();
+    rerender(
+      <CoachPanel insight={null} emptyState="unfinishedGame" repository={repository} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />,
     );
     expect(screen.getByText("Coach guidance is available only for completed games.")).toBeInTheDocument();
   });

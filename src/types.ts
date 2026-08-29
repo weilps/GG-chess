@@ -73,6 +73,7 @@ export interface StoredPositionEvaluation extends PositionEvaluation {
 export interface AnalysisSnapshot {
   cacheKey: string | null;
   evaluations: PositionEvaluation[];
+  engineStatus: "loading" | "ready" | "missing" | "error";
   loading: boolean;
   profile: AnalysisProfileId;
 }

@@ -16,7 +16,13 @@ import type { CoachInsight, CoachLineStatus, CoachTipId } from "./coachInsight";
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 type CoachTab = "explanation" | "planPractice";
-export type CoachEmptyState = "selectMove" | "startingPosition" | "analysisLoading" | "unfinishedGame";
+export type CoachEmptyState =
+  | "selectMove"
+  | "startingPosition"
+  | "engineLoading"
+  | "stockfishUnavailable"
+  | "analysisLoading"
+  | "unfinishedGame";
 
 const TIP_KEYS: Record<CoachTipId, TranslationKey> = {
   scanAllChecks: "coachTipScanAllChecks",
@@ -36,6 +42,8 @@ const LINE_STATUS_KEYS: Record<Exclude<CoachLineStatus, "available">, Translatio
 const EMPTY_STATE_KEYS: Record<CoachEmptyState, TranslationKey> = {
   selectMove: "coachSelectMove",
   startingPosition: "coachStartingPosition",
+  engineLoading: "coachEngineLoading",
+  stockfishUnavailable: "coachStockfishUnavailable",
   analysisLoading: "coachAnalysisLoading",
   unfinishedGame: "coachCompletedOnly",
 };

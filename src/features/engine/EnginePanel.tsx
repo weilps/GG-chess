@@ -126,10 +126,11 @@ export function EnginePanel({
     onAnalysisStateChange?.({
       cacheKey: activeCacheKey,
       evaluations,
+      engineStatus,
       loading: isCacheLoading,
       profile: profileId,
     });
-  }, [activeCacheKey, evaluations, isCacheLoading, onAnalysisStateChange, profileId]);
+  }, [activeCacheKey, engineStatus, evaluations, isCacheLoading, onAnalysisStateChange, profileId]);
 
   useEffect(() => {
     let active = true;
@@ -207,6 +208,7 @@ export function EnginePanel({
       onAnalysisStateChange?.({
         cacheKey: null,
         evaluations: [],
+        engineStatus: "ready",
         loading: true,
         profile: profileId,
       });
@@ -222,6 +224,7 @@ export function EnginePanel({
     onAnalysisStateChange?.({
       cacheKey: null,
       evaluations: [],
+      engineStatus: "ready",
       loading: true,
       profile: next,
     });
@@ -238,6 +241,7 @@ export function EnginePanel({
     onAnalysisStateChange?.({
       cacheKey: null,
       evaluations: [],
+      engineStatus: "ready",
       loading: true,
       profile: profileId,
     });
