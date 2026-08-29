@@ -198,6 +198,7 @@ describe("EnginePanel", () => {
     expect(onAnalysisStateChange).toHaveBeenCalledWith({
       cacheKey: null,
       evaluations: [],
+      engineStatus: "ready",
       loading: true,
       profile: "balanced",
     });
@@ -206,6 +207,27 @@ describe("EnginePanel", () => {
       profile: "balanced",
     })));
     expect(onAnalysisStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
+  });
+
+  it("exposes a distinct missing-engine state to the review screen", async () => {
+    const onAnalysisStateChange = vi.fn();
+    mocks.detectStockfish.mockResolvedValue(null);
+
+    render(
+      <EnginePanel
+        game={game}
+        positionIndex={0}
+        repository={new MemoryGameRepository()}
+        t={t}
+        onAnalysisStateChange={onAnalysisStateChange}
+      />,
+    );
+
+    await waitFor(() => expect(onAnalysisStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
+      engineStatus: "missing",
+      evaluations: [],
+      loading: false,
+    })));
   });
 
   it("opens compact settings and returns focus when dismissed", async () => {

@@ -26,6 +26,7 @@ vi.mock("../engine/EnginePanel", async () => {
   const snapshot: AnalysisSnapshot = {
     cacheKey: "review\u0000Stockfish 18\u000018\u0000balanced",
     profile: "balanced",
+    engineStatus: "ready",
     loading: false,
     evaluations: [
       { positionIndex: 0, scoreCp: 100, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4", "e7e5"] },
@@ -42,6 +43,7 @@ vi.mock("../engine/EnginePanel", async () => {
         <button onClick={() => onAnalysisStateChange?.({
           cacheKey: null,
           profile: "deep",
+          engineStatus: "ready",
           loading: true,
           evaluations: [],
         })}>
@@ -99,7 +101,7 @@ describe("ReviewScreen Game Review integration", () => {
       name: "Black, move 1 e5, Inaccuracy, 100 cp",
     }));
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[2]);
-    const coach = screen.getByRole("region", { name: "Local coach" });
+    const coach = screen.getByRole("region", { name: "Coach" });
     expect(coach).toHaveTextContent("Inaccuracy");
     expect(coach).toHaveTextContent("Played e5");
     expect(coach).toHaveTextContent("c5 Nf3");
@@ -110,8 +112,7 @@ describe("ReviewScreen Game Review integration", () => {
     expect(screen.queryByRole("button", { name: /Position 1, after e4/ })).not.toBeInTheDocument();
     expect(screen.getByRole("meter", { name: "Evaluation bar unavailable for this position" }))
       .not.toHaveAttribute("aria-valuenow");
-    expect(coach).toHaveTextContent("Not rated");
-    expect(coach).toHaveTextContent("Analyze both adjacent positions");
+    expect(coach).toHaveTextContent("Stockfish is analyzing this game.");
     expect(coach).not.toHaveTextContent("c5 Nf3");
     expect(screen.getByTestId("codex-adviser-request")).toHaveTextContent("unavailable");
   });

@@ -46,7 +46,7 @@ describe("ReviewScreen", () => {
     expect(screen.getByTestId("board-orientation")).toHaveAttribute("data-orientation", "black");
   });
 
-  it("keeps unrated moves explicit until adjacent evaluations are available", () => {
+  it("distinguishes an unavailable Stockfish engine from an unrated move", async () => {
     render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
 
     expect(screen.getAllByLabelText("Not rated")).toHaveLength(game.moves.length);
@@ -54,8 +54,10 @@ describe("ReviewScreen", () => {
     expect(screen.getAllByText("—", { selector: ".accuracy-sides strong" })).toHaveLength(2);
     fireEvent.click(screen.getByRole("tab", { name: "Moves" }));
     fireEvent.click(screen.getByText("e4"));
-    expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Not rated");
-    expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Analyze both adjacent positions to rate this move.");
+    const coach = screen.getByRole("region", { name: "Coach" });
+    expect(await screen.findByText("Stockfish is unavailable. Open Analysis settings to choose an engine.")).toBeInTheDocument();
+    expect(coach).not.toHaveTextContent("Not rated");
+    expect(coach).not.toHaveTextContent("Analyze both adjacent positions to rate this move.");
   });
 
   it("does not offer engine analysis for a Result * game", () => {

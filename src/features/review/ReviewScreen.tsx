@@ -4,10 +4,9 @@ import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
 import type { AnalysisSnapshot, Language, StoredGame } from "../../types";
 import { buildCodexAdviceRequest } from "../adviser/codexClient";
-import { CodexAdvisorPanel } from "../adviser/CodexAdvisorPanel";
 import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
-import { MoveRatingBadge, MoveRatingDetail } from "../classification/MoveRatings";
-import { CoachPanel } from "../coach/CoachPanel";
+import { MoveRatingBadge } from "../classification/MoveRatings";
+import { CoachPanel, type CoachEmptyState } from "../coach/CoachPanel";
 import { buildCoachInsight } from "../coach/coachInsight";
 import { EnginePanel } from "../engine/EnginePanel";
 import { EvaluationBar } from "./EvaluationBar";
@@ -79,6 +78,7 @@ export function ReviewScreen({
   const [analysisSnapshot, setAnalysisSnapshot] = useState<AnalysisSnapshot>({
     cacheKey: null,
     evaluations: [],
+    engineStatus: "loading",
     loading: true,
     profile: "balanced",
   });
@@ -149,10 +149,13 @@ export function ReviewScreen({
   const accuracy = useMemo(() => calculateGameAccuracy(moveRatings), [moveRatings]);
   const selectedRating = positionIndex > 0 ? moveRatings[positionIndex - 1] ?? null : null;
   const coachInsight = useMemo(
-    () => isCompletedGame && selectedRating
+    () => isCompletedGame
+      && selectedRating
+      && analysisSnapshot.engineStatus === "ready"
+      && !analysisSnapshot.loading
       ? buildCoachInsight(game, selectedRating, activeEvaluations)
       : null,
-    [activeEvaluations, game, isCompletedGame, selectedRating],
+    [activeEvaluations, analysisSnapshot.engineStatus, analysisSnapshot.loading, game, isCompletedGame, selectedRating],
   );
   const codexRequest = useMemo(
     () => buildCodexAdviceRequest(game, coachInsight, language),
@@ -161,6 +164,17 @@ export function ReviewScreen({
   const selectedEvaluation = activeEvaluations.find(
     (evaluation) => evaluation.positionIndex === positionIndex,
   ) ?? null;
+  const coachEmptyState: CoachEmptyState = !isCompletedGame
+    ? "unfinishedGame"
+    : positionIndex === 0
+      ? "startingPosition"
+      : analysisSnapshot.engineStatus === "loading"
+        ? "engineLoading"
+        : analysisSnapshot.engineStatus === "missing" || analysisSnapshot.engineStatus === "error"
+          ? "stockfishUnavailable"
+          : analysisSnapshot.loading
+            ? "analysisLoading"
+            : "selectMove";
 
   const goTo = (next: number) =>
     setPositionIndex(Math.min(lastPositionIndex, Math.max(0, next)));
@@ -281,19 +295,14 @@ export function ReviewScreen({
         </div>
 
         <aside className="review-sidebar">
-          <div className="coach-stack">
-            <CoachPanel
-              insight={coachInsight}
-              unavailable={!isCompletedGame}
-              t={t}
-            />
-            <CodexAdvisorPanel
-              key={`${analysisSnapshot.cacheKey ?? "no-cache"}:${codexRequest ? JSON.stringify(codexRequest) : "unavailable"}`}
-              request={codexRequest}
-              repository={repository}
-              t={t}
-            />
-          </div>
+          <CoachPanel
+            insight={coachInsight}
+            emptyState={coachEmptyState}
+            codexRequest={codexRequest}
+            codexContextKey={`${analysisSnapshot.cacheKey ?? "no-cache"}:${positionIndex}:${language}:${codexRequest ? JSON.stringify(codexRequest) : "unavailable"}`}
+            repository={repository}
+            t={t}
+          />
           <div className="review-lower-panel">
             <div className="review-tabs" role="tablist" aria-label={t("reviewPanels")}>
               <button
@@ -331,9 +340,6 @@ export function ReviewScreen({
                   <div><span>{t("timeControl")}</span><strong>{game.timeControl ?? "—"}</strong></div>
                   <div><span>{t("source")}</span><strong>{game.source ?? "—"}</strong></div>
                 </div>
-                <section className="move-ratings selected-move-summary" aria-label={t("selectedMoveRating")}>
-                  <MoveRatingDetail selected={selectedRating} t={t} />
-                </section>
                 <div className="move-list">
                   {movePairs.map((pair) => {
                     const whiteIndex = (pair.number - 1) * 2 + 1;
