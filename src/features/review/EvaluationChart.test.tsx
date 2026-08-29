@@ -5,8 +5,8 @@ import type { MoveClassification, PositionEvaluation } from "../../types";
 import { EvaluationChart } from "./EvaluationChart";
 
 const evaluations: PositionEvaluation[] = [
-  { positionIndex: 0, scoreCp: 0, mate: null, depth: 18, bestMove: "e2e4", pv: [] },
-  { positionIndex: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "e7e5", pv: [] },
+  { positionIndex: 0, scoreCp: 0, mate: null, depth: 18, bestMove: "e2e4", pv: [], variations: [{ rank: 1, scoreCp: 0, mate: null, depth: 18, bestMove: "e2e4", pv: [] }] },
+  { positionIndex: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "e7e5", pv: [], variations: [{ rank: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "e7e5", pv: [] }] },
 ];
 const ratings: MoveClassification[] = [{
   moveIndex: 0,

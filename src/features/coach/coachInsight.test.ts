@@ -15,7 +15,8 @@ function evaluation(
   pv: string[] = [],
   mate: number | null = null,
 ): PositionEvaluation {
-  return { positionIndex, scoreCp, mate, depth: 18, bestMove, pv };
+  const rankOne = { rank: 1 as const, scoreCp, mate, depth: 18, bestMove, pv };
+  return { positionIndex, scoreCp, mate, depth: 18, bestMove, pv, variations: [rankOne] };
 }
 
 function rating(

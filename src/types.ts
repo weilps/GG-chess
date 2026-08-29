@@ -41,6 +41,7 @@ export interface ImportSummary {
 }
 
 export type AnalysisProfileId = "quick" | "balanced" | "deep";
+export type MultiPv = 1 | 2 | 3;
 
 export interface AnalysisProfile {
   id: AnalysisProfileId;
@@ -53,8 +54,8 @@ export interface EngineInfo {
   version: string;
 }
 
-export interface PositionEvaluation {
-  positionIndex: number;
+export interface RankedVariation {
+  rank: MultiPv;
   scoreCp: number | null;
   mate: number | null;
   depth: number;
@@ -62,11 +63,17 @@ export interface PositionEvaluation {
   pv: string[];
 }
 
+export interface PositionEvaluation extends Omit<RankedVariation, "rank"> {
+  positionIndex: number;
+  variations: RankedVariation[];
+}
+
 export interface StoredPositionEvaluation extends PositionEvaluation {
   gameFingerprint: string;
   engineName: string;
   engineVersion: string;
   profile: AnalysisProfileId;
+  multiPv: MultiPv;
   analyzedAt: string;
 }
 
@@ -76,6 +83,7 @@ export interface AnalysisSnapshot {
   engineStatus: "loading" | "ready" | "missing" | "error";
   loading: boolean;
   profile: AnalysisProfileId;
+  multiPv: MultiPv;
 }
 
 export type MoveClassificationId =

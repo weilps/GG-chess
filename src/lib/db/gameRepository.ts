@@ -4,8 +4,10 @@ import type { PortableBackup, RestoreSummary } from "../data/portableData";
 import type {
   AnalysisProfileId,
   EngineInfo,
+  MultiPv,
   ParsedGame,
   PositionEvaluation,
+  RankedVariation,
   StoredGame,
   StoredPositionEvaluation,
 } from "../../types";
@@ -29,6 +31,7 @@ export interface StoredAnalysisCache {
   engineName: string;
   engineVersion: string;
   profile: AnalysisProfileId;
+  multiPv: MultiPv;
   analyzedAt: string;
   evaluations: StoredPositionEvaluation[];
 }
@@ -75,17 +78,20 @@ export interface GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
   ): Promise<StoredPositionEvaluation[]>;
   saveEvaluations(
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
     evaluations: PositionEvaluation[],
   ): Promise<void>;
   clearAnalysis(
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
   ): Promise<void>;
 }
 
@@ -205,6 +211,7 @@ export class MemoryGameRepository implements GameRepository {
           evaluation.engineName,
           evaluation.engineVersion,
           evaluation.profile,
+          evaluation.multiPv,
           evaluation.positionIndex,
         ].join("\u0000");
         mergeMemoryRecord(this.evaluations, key, evaluation, evaluation.analyzedAt, summary);
@@ -254,13 +261,15 @@ export class MemoryGameRepository implements GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
   ): Promise<StoredPositionEvaluation[]> {
     return [...this.evaluations.values()]
       .filter((evaluation) =>
         evaluation.gameFingerprint === gameFingerprint
         && evaluation.engineName === engine.name
         && evaluation.engineVersion === engine.version
-        && evaluation.profile === profile)
+        && evaluation.profile === profile
+        && evaluation.multiPv === multiPv)
       .sort((left, right) => left.positionIndex - right.positionIndex);
   }
 
@@ -268,17 +277,19 @@ export class MemoryGameRepository implements GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
     evaluations: PositionEvaluation[],
   ): Promise<void> {
     const analyzedAt = new Date().toISOString();
     for (const evaluation of evaluations) {
-      const key = analysisKey(gameFingerprint, engine, profile, evaluation.positionIndex);
+      const key = analysisKey(gameFingerprint, engine, profile, multiPv, evaluation.positionIndex);
       this.evaluations.set(key, {
         ...evaluation,
         gameFingerprint,
         engineName: engine.name,
         engineVersion: engine.version,
         profile,
+        multiPv,
         analyzedAt,
       });
     }
@@ -288,6 +299,7 @@ export class MemoryGameRepository implements GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
   ): Promise<void> {
     for (const [key, evaluation] of this.evaluations) {
       if (
@@ -295,6 +307,7 @@ export class MemoryGameRepository implements GameRepository {
         && evaluation.engineName === engine.name
         && evaluation.engineVersion === engine.version
         && evaluation.profile === profile
+        && evaluation.multiPv === multiPv
       ) {
         this.evaluations.delete(key);
       }
@@ -306,9 +319,10 @@ function analysisKey(
   gameFingerprint: string,
   engine: EngineInfo,
   profile: AnalysisProfileId,
+  multiPv: MultiPv,
   positionIndex: number,
 ): string {
-  return [gameFingerprint, engine.name, engine.version, profile, positionIndex].join("\u0000");
+  return [gameFingerprint, engine.name, engine.version, profile, multiPv, positionIndex].join("\u0000");
 }
 
 function mergeMemoryRecord<T extends object>(
@@ -369,12 +383,14 @@ interface EvaluationRow {
   engine_name: string;
   engine_version: string;
   profile: AnalysisProfileId;
+  multi_pv: MultiPv;
   position_index: number;
   score_cp: number | null;
   mate: number | null;
   depth: number;
   best_move: string;
   pv_json: string;
+  variations_json: string;
   analyzed_at: string;
 }
 
@@ -405,17 +421,28 @@ interface TrainingActivityRow {
 }
 
 function evaluationFromRow(row: EvaluationRow): StoredPositionEvaluation {
-  return {
-    gameFingerprint: row.game_fingerprint,
-    engineName: row.engine_name,
-    engineVersion: row.engine_version,
-    profile: row.profile,
-    positionIndex: row.position_index,
+  const rankOne: RankedVariation = {
+    rank: 1,
     scoreCp: row.score_cp,
     mate: row.mate,
     depth: row.depth,
     bestMove: row.best_move || null,
     pv: JSON.parse(row.pv_json) as string[],
+  };
+  const storedVariations = JSON.parse(row.variations_json) as RankedVariation[];
+  return {
+    gameFingerprint: row.game_fingerprint,
+    engineName: row.engine_name,
+    engineVersion: row.engine_version,
+    profile: row.profile,
+    multiPv: row.multi_pv,
+    positionIndex: row.position_index,
+    scoreCp: row.score_cp,
+    mate: row.mate,
+    depth: row.depth,
+    bestMove: row.best_move || null,
+    pv: rankOne.pv,
+    variations: storedVariations.length > 0 ? storedVariations : [rankOne],
     analyzedAt: row.analyzed_at,
   };
 }
@@ -430,12 +457,14 @@ function groupAnalysisCaches(
       evaluation.engineName,
       evaluation.engineVersion,
       evaluation.profile,
+      evaluation.multiPv,
     ].join("\u0000");
     const group = groups.get(key) ?? {
       gameFingerprint: evaluation.gameFingerprint,
       engineName: evaluation.engineName,
       engineVersion: evaluation.engineVersion,
       profile: evaluation.profile,
+      multiPv: evaluation.multiPv,
       analyzedAt: evaluation.analyzedAt,
       evaluations: [],
     };
@@ -501,6 +530,47 @@ export class SqliteGameRepository implements GameRepository {
         FOREIGN KEY (game_fingerprint) REFERENCES games(fingerprint) ON DELETE CASCADE
       )
     `);
+    await this.database.execute(`
+      CREATE TABLE IF NOT EXISTS position_evaluations_v2 (
+        game_fingerprint TEXT NOT NULL,
+        engine_name TEXT NOT NULL,
+        engine_version TEXT NOT NULL,
+        profile TEXT NOT NULL,
+        multi_pv INTEGER NOT NULL CHECK (multi_pv BETWEEN 1 AND 3),
+        position_index INTEGER NOT NULL,
+        score_cp INTEGER,
+        mate INTEGER,
+        depth INTEGER NOT NULL,
+        best_move TEXT NOT NULL,
+        pv_json TEXT NOT NULL,
+        variations_json TEXT NOT NULL,
+        analyzed_at TEXT NOT NULL,
+        PRIMARY KEY (
+          game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index
+        ),
+        FOREIGN KEY (game_fingerprint) REFERENCES games(fingerprint) ON DELETE CASCADE
+      )
+    `);
+    const analysisStorageVersion = await this.database.select<SettingRow[]>(
+      "SELECT value FROM app_settings WHERE key = $1",
+      ["analysisStorageVersion"],
+    );
+    // Replaying this copy would resurrect stale legacy rows after a v2 cache is cleared.
+    if (analysisStorageVersion[0]?.value !== "2") {
+      await this.database.execute(`
+        INSERT OR IGNORE INTO position_evaluations_v2 (
+          game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index,
+          score_cp, mate, depth, best_move, pv_json, variations_json, analyzed_at
+        )
+        SELECT game_fingerprint, engine_name, engine_version, profile, 1, position_index,
+          score_cp, mate, depth, best_move, pv_json, '[]', analyzed_at
+        FROM position_evaluations
+      `);
+      await this.database.execute(
+        "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        ["analysisStorageVersion", "2"],
+      );
+    }
     await this.database.execute(`
       CREATE TABLE IF NOT EXISTS chess_com_sync_months (
         username TEXT NOT NULL,
@@ -673,8 +743,8 @@ export class SqliteGameRepository implements GameRepository {
 
   async listAnalysisCaches(): Promise<StoredAnalysisCache[]> {
     const rows = await this.requireDatabase().select<EvaluationRow[]>(`
-      SELECT * FROM position_evaluations
-      ORDER BY game_fingerprint, engine_name, engine_version, profile, position_index
+      SELECT * FROM position_evaluations_v2
+      ORDER BY game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index
     `);
     return groupAnalysisCaches(rows.map(evaluationFromRow));
   }
@@ -778,13 +848,14 @@ export class SqliteGameRepository implements GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
   ): Promise<StoredPositionEvaluation[]> {
     const rows = await this.requireDatabase().select<EvaluationRow[]>(
-      `SELECT * FROM position_evaluations
+      `SELECT * FROM position_evaluations_v2
        WHERE game_fingerprint = $1 AND engine_name = $2
-         AND engine_version = $3 AND profile = $4
+         AND engine_version = $3 AND profile = $4 AND multi_pv = $5
        ORDER BY position_index ASC`,
-      [gameFingerprint, engine.name, engine.version, profile],
+      [gameFingerprint, engine.name, engine.version, profile, multiPv],
     );
     return rows.map(evaluationFromRow);
   }
@@ -793,31 +864,35 @@ export class SqliteGameRepository implements GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
     evaluations: PositionEvaluation[],
   ): Promise<void> {
     const database = this.requireDatabase();
     const analyzedAt = new Date().toISOString();
     for (const evaluation of evaluations) {
       await database.execute(
-        `INSERT INTO position_evaluations (
-          game_fingerprint, engine_name, engine_version, profile, position_index,
-          score_cp, mate, depth, best_move, pv_json, analyzed_at
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
-        ON CONFLICT(game_fingerprint, engine_name, engine_version, profile, position_index)
+        `INSERT INTO position_evaluations_v2 (
+          game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index,
+          score_cp, mate, depth, best_move, pv_json, variations_json, analyzed_at
+        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+        ON CONFLICT(game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index)
         DO UPDATE SET score_cp = excluded.score_cp, mate = excluded.mate,
           depth = excluded.depth, best_move = excluded.best_move,
-          pv_json = excluded.pv_json, analyzed_at = excluded.analyzed_at`,
+          pv_json = excluded.pv_json, variations_json = excluded.variations_json,
+          analyzed_at = excluded.analyzed_at`,
         [
           gameFingerprint,
           engine.name,
           engine.version,
           profile,
+          multiPv,
           evaluation.positionIndex,
           evaluation.scoreCp,
           evaluation.mate,
           evaluation.depth,
           evaluation.bestMove ?? "",
           JSON.stringify(evaluation.pv),
+          JSON.stringify(evaluation.variations),
           analyzedAt,
         ],
       );
@@ -828,12 +903,13 @@ export class SqliteGameRepository implements GameRepository {
     gameFingerprint: string,
     engine: EngineInfo,
     profile: AnalysisProfileId,
+    multiPv: MultiPv,
   ): Promise<void> {
     await this.requireDatabase().execute(
-      `DELETE FROM position_evaluations
+      `DELETE FROM position_evaluations_v2
        WHERE game_fingerprint = $1 AND engine_name = $2
-         AND engine_version = $3 AND profile = $4`,
-      [gameFingerprint, engine.name, engine.version, profile],
+         AND engine_version = $3 AND profile = $4 AND multi_pv = $5`,
+      [gameFingerprint, engine.name, engine.version, profile, multiPv],
     );
   }
 }

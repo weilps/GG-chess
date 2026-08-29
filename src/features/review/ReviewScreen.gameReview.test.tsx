@@ -23,15 +23,25 @@ vi.mock("../adviser/CodexAdvisorPanel", () => ({
 
 vi.mock("../engine/EnginePanel", async () => {
   const { useEffect } = await import("react");
+  const evaluation = (positionIndex: number, scoreCp: number, bestMove: string | null, pv: string[]) => ({
+    positionIndex,
+    scoreCp,
+    mate: null,
+    depth: 18,
+    bestMove,
+    pv,
+    variations: [{ rank: 1 as const, scoreCp, mate: null, depth: 18, bestMove, pv }],
+  });
   const snapshot: AnalysisSnapshot = {
     cacheKey: "review\u0000Stockfish 18\u000018\u0000balanced",
     profile: "balanced",
     engineStatus: "ready",
     loading: false,
+    multiPv: 1,
     evaluations: [
-      { positionIndex: 0, scoreCp: 100, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4", "e7e5"] },
-      { positionIndex: 1, scoreCp: 50, mate: null, depth: 18, bestMove: "c7c5", pv: ["c7c5", "g1f3"] },
-      { positionIndex: 2, scoreCp: 150, mate: null, depth: 18, bestMove: null, pv: [] },
+      evaluation(0, 100, "e2e4", ["e2e4", "e7e5"]),
+      evaluation(1, 50, "c7c5", ["c7c5", "g1f3"]),
+      evaluation(2, 150, null, []),
     ],
   };
   return {
@@ -45,6 +55,7 @@ vi.mock("../engine/EnginePanel", async () => {
           profile: "deep",
           engineStatus: "ready",
           loading: true,
+          multiPv: 1,
           evaluations: [],
         })}>
           Switch profile fixture

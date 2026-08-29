@@ -33,6 +33,17 @@ pub struct EngineInfo {
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
+pub struct RankedVariation {
+    pub rank: u8,
+    pub score_cp: Option<i32>,
+    pub mate: Option<i32>,
+    pub depth: u32,
+    pub best_move: Option<String>,
+    pub pv: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
 pub struct PositionEvaluation {
     pub position_index: usize,
     pub score_cp: Option<i32>,
@@ -40,6 +51,7 @@ pub struct PositionEvaluation {
     pub depth: u32,
     pub best_move: Option<String>,
     pub pv: Vec<String>,
+    pub variations: Vec<RankedVariation>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -49,6 +61,7 @@ pub struct AnalyzeRequest {
     pub engine_path: String,
     pub game_result: String,
     pub depth: u32,
+    pub multi_pv: u8,
     pub positions: Vec<String>,
     pub position_indexes: Vec<usize>,
 }
@@ -71,6 +84,7 @@ struct AnalysisProgress {
 
 #[derive(Debug, Default, Clone, PartialEq)]
 struct ParsedInfo {
+    multi_pv: u8,
     depth: u32,
     score_cp: Option<i32>,
     mate: Option<i32>,
@@ -189,10 +203,10 @@ impl UciSession {
         Ok((name, version))
     }
 
-    fn configure(&mut self) -> Result<(), String> {
+    fn configure(&mut self, multi_pv: u8) -> Result<(), String> {
         self.send("setoption name Threads value 2")?;
         self.send("setoption name Hash value 128")?;
-        self.send("setoption name MultiPV value 1")?;
+        self.send(&format!("setoption name MultiPV value {multi_pv}"))?;
         self.send("isready")?;
         let deadline = Instant::now() + HANDSHAKE_TIMEOUT;
         loop {
@@ -210,13 +224,14 @@ impl UciSession {
         fen: &str,
         position_index: usize,
         depth: u32,
+        multi_pv: u8,
         cancelled: &AtomicBool,
     ) -> Result<Option<PositionEvaluation>, String> {
         let white_multiplier = white_perspective_multiplier(fen)?;
         self.send(&format!("position fen {fen}"))?;
         self.send(&format!("go depth {depth}"))?;
         let deadline = Instant::now() + POSITION_TIMEOUT;
-        let mut latest = None;
+        let mut latest = HashMap::<u8, ParsedInfo>::new();
 
         loop {
             if cancelled.load(Ordering::SeqCst) {
@@ -233,17 +248,21 @@ impl UciSession {
                 Err(RecvTimeoutError::Disconnected) => return Err("engine_exited".to_string()),
             };
             if let Some(info) = parse_info_line(&line) {
-                if info.score_cp.is_some() || info.mate.is_some() {
-                    latest = Some(info);
+                if info.multi_pv <= multi_pv && (info.score_cp.is_some() || info.mate.is_some()) {
+                    let should_replace = latest
+                        .get(&info.multi_pv)
+                        .is_none_or(|current| info.depth >= current.depth);
+                    if should_replace {
+                        latest.insert(info.multi_pv, info);
+                    }
                 }
             }
             if let Some(best_move) = line.strip_prefix("bestmove ") {
                 let best_move = best_move.split_whitespace().next().unwrap_or_default();
-                let info = latest.ok_or_else(|| "engine_malformed".to_string())?;
                 return Ok(Some(finish_evaluation(
                     position_index,
                     white_multiplier,
-                    info,
+                    latest,
                     best_move,
                 )?));
             }
@@ -304,12 +323,22 @@ fn parse_info_line(line: &str) -> Option<ParsedInfo> {
         return None;
     }
     let tokens: Vec<&str> = line.split_whitespace().collect();
-    let mut parsed = ParsedInfo::default();
+    let mut parsed = ParsedInfo {
+        multi_pv: 1,
+        ..ParsedInfo::default()
+    };
     let mut index = 1;
     while index < tokens.len() {
         match tokens[index] {
             "depth" if index + 1 < tokens.len() => {
                 parsed.depth = tokens[index + 1].parse().ok()?;
+                index += 2;
+            }
+            "multipv" if index + 1 < tokens.len() => {
+                parsed.multi_pv = tokens[index + 1].parse().ok()?;
+                if parsed.multi_pv == 0 {
+                    return None;
+                }
                 index += 2;
             }
             "score" if index + 2 < tokens.len() => {
@@ -346,23 +375,84 @@ fn is_completed_game_result(result: &str) -> bool {
     matches!(result, "1-0" | "0-1" | "1/2-1/2")
 }
 
+fn validate_analysis_request(request: &AnalyzeRequest) -> Result<(), String> {
+    if !is_completed_game_result(&request.game_result) {
+        return Err("analysis_unfinished_game".to_string());
+    }
+    if request.depth == 0 || request.depth > 50 {
+        return Err("engine_invalid_depth".to_string());
+    }
+    if !(1..=3).contains(&request.multi_pv) {
+        return Err("engine_invalid_multipv".to_string());
+    }
+    if request
+        .position_indexes
+        .iter()
+        .any(|index| *index >= request.positions.len())
+    {
+        return Err("engine_malformed_position".to_string());
+    }
+    Ok(())
+}
+
 fn finish_evaluation(
     position_index: usize,
     white_multiplier: i32,
-    info: ParsedInfo,
+    infos: HashMap<u8, ParsedInfo>,
     best_move: &str,
 ) -> Result<PositionEvaluation, String> {
     if best_move.is_empty() {
         return Err("engine_malformed".to_string());
     }
     let terminal = best_move == "(none)";
+    let mut infos = infos.into_values().collect::<Vec<_>>();
+    infos.sort_by_key(|info| info.multi_pv);
+    if infos.is_empty()
+        || infos[0].multi_pv != 1
+        || infos
+            .iter()
+            .enumerate()
+            .any(|(index, info)| info.multi_pv as usize != index + 1)
+    {
+        return Err("engine_malformed".to_string());
+    }
+    if terminal {
+        infos.truncate(1);
+    }
+    let variations = infos
+        .into_iter()
+        .map(|info| {
+            let variation_best_move = if terminal {
+                None
+            } else if info.multi_pv == 1 {
+                Some(best_move.to_string())
+            } else {
+                info.pv.first().cloned()
+            };
+            if !terminal && variation_best_move.is_none() {
+                return Err("engine_malformed".to_string());
+            }
+            Ok(RankedVariation {
+                rank: info.multi_pv,
+                score_cp: info.score_cp.map(|score| score * white_multiplier),
+                mate: info.mate.map(|mate| mate * white_multiplier),
+                depth: info.depth,
+                best_move: variation_best_move,
+                pv: if terminal { Vec::new() } else { info.pv },
+            })
+        })
+        .collect::<Result<Vec<_>, String>>()?;
+    let rank_one = variations
+        .first()
+        .ok_or_else(|| "engine_malformed".to_string())?;
     Ok(PositionEvaluation {
         position_index,
-        score_cp: info.score_cp.map(|score| score * white_multiplier),
-        mate: info.mate.map(|mate| mate * white_multiplier),
-        depth: info.depth,
-        best_move: (!terminal).then(|| best_move.to_string()),
-        pv: if terminal { Vec::new() } else { info.pv },
+        score_cp: rank_one.score_cp,
+        mate: rank_one.mate,
+        depth: rank_one.depth,
+        best_move: rank_one.best_move.clone(),
+        pv: rank_one.pv.clone(),
+        variations,
     })
 }
 
@@ -431,19 +521,7 @@ pub async fn analyze_game(
     app: tauri::AppHandle,
     state: State<'_, EngineState>,
 ) -> Result<AnalyzeResponse, String> {
-    if !is_completed_game_result(&request.game_result) {
-        return Err("analysis_unfinished_game".to_string());
-    }
-    if request.depth == 0 || request.depth > 50 {
-        return Err("engine_invalid_depth".to_string());
-    }
-    if request
-        .position_indexes
-        .iter()
-        .any(|index| *index >= request.positions.len())
-    {
-        return Err("engine_malformed_position".to_string());
-    }
+    validate_analysis_request(&request)?;
 
     let cancellation = Arc::new(AtomicBool::new(false));
     {
@@ -463,7 +541,7 @@ pub async fn analyze_game(
         let path = canonical_engine_path(&request.engine_path)?;
         let mut session = UciSession::spawn(&path)?;
         session.handshake()?;
-        session.configure()?;
+        session.configure(request.multi_pv)?;
         let total = request.position_indexes.len();
         let mut evaluations = Vec::new();
 
@@ -475,6 +553,7 @@ pub async fn analyze_game(
                 &request.positions[position_index],
                 position_index,
                 request.depth,
+                request.multi_pv,
                 &cancellation,
             )? {
                 Some(evaluation) => {
@@ -521,6 +600,7 @@ fn main() {
     let stdin = io::stdin();
     let mut stdout = io::stdout();
     let mut position = String::new();
+    let mut multi_pv = 1_u8;
     for line in stdin.lock().lines() {
         let line = line.expect("fake engine stdin");
         if line == "uci" {
@@ -530,12 +610,21 @@ fn main() {
             writeln!(stdout, "readyok").unwrap();
         } else if let Some(fen) = line.strip_prefix("position fen ") {
             position = fen.to_string();
+        } else if let Some(value) = line.strip_prefix("setoption name MultiPV value ") {
+            multi_pv = value.parse().unwrap();
         } else if let Some(depth) = line.strip_prefix("go depth ") {
             if position.starts_with("7k/6Q1/6K1") {
                 writeln!(stdout, "info depth 0 score mate 0").unwrap();
                 writeln!(stdout, "bestmove (none)").unwrap();
             } else {
-                writeln!(stdout, "info depth {depth} score cp 42 pv e2e4 e7e5").unwrap();
+                let lines = [
+                    (42, "e2e4 e7e5"),
+                    (18, "d2d4 d7d5"),
+                    (-12, "g1f3 g8f6"),
+                ];
+                for (offset, (score, pv)) in lines.iter().take(multi_pv as usize).enumerate() {
+                    writeln!(stdout, "info depth {depth} multipv {} score cp {score} pv {pv}", offset + 1).unwrap();
+                }
                 writeln!(stdout, "bestmove e2e4").unwrap();
             }
         } else if line == "quit" {
@@ -598,6 +687,7 @@ fn main() {
         assert_eq!(
             info,
             ParsedInfo {
+                multi_pv: 1,
                 depth: 18,
                 score_cp: Some(35),
                 mate: None,
@@ -608,7 +698,8 @@ fn main() {
 
     #[test]
     fn parses_mate_score_and_ignores_non_info_lines() {
-        let info = parse_info_line("info depth 22 score mate -3 pv h7h8q").unwrap();
+        let info = parse_info_line("info depth 22 multipv 2 score mate -3 pv h7h8q").unwrap();
+        assert_eq!(info.multi_pv, 2);
         assert_eq!(info.mate, Some(-3));
         assert!(parse_info_line("bestmove h7h8q").is_none());
     }
@@ -653,12 +744,16 @@ fn main() {
         let evaluation = finish_evaluation(
             42,
             -1,
-            ParsedInfo {
-                depth: 0,
-                score_cp: None,
-                mate: Some(0),
-                pv: Vec::new(),
-            },
+            HashMap::from([(
+                1,
+                ParsedInfo {
+                    multi_pv: 1,
+                    depth: 0,
+                    score_cp: None,
+                    mate: Some(0),
+                    pv: Vec::new(),
+                },
+            )]),
             "(none)",
         )
         .unwrap();
@@ -666,6 +761,69 @@ fn main() {
         assert_eq!(evaluation.mate, Some(0));
         assert_eq!(evaluation.best_move, None);
         assert!(evaluation.pv.is_empty());
+        assert_eq!(evaluation.variations.len(), 1);
+    }
+
+    #[test]
+    fn validates_multipv_before_engine_start_and_collects_ranked_scores() {
+        let request = |multi_pv| AnalyzeRequest {
+            analysis_id: "test".into(),
+            engine_path: "missing-engine".into(),
+            game_result: "1-0".into(),
+            depth: 18,
+            multi_pv,
+            positions: vec!["8/8/8/8/8/8/8/8 w - - 0 1".into()],
+            position_indexes: vec![0],
+        };
+        assert!(validate_analysis_request(&request(1)).is_ok());
+        assert!(validate_analysis_request(&request(3)).is_ok());
+        assert_eq!(
+            validate_analysis_request(&request(0)),
+            Err("engine_invalid_multipv".into())
+        );
+        assert_eq!(
+            validate_analysis_request(&request(4)),
+            Err("engine_invalid_multipv".into())
+        );
+
+        let variations = HashMap::from([
+            (
+                1,
+                ParsedInfo {
+                    multi_pv: 1,
+                    depth: 18,
+                    score_cp: Some(40),
+                    mate: None,
+                    pv: vec!["e2e4".into()],
+                },
+            ),
+            (
+                2,
+                ParsedInfo {
+                    multi_pv: 2,
+                    depth: 17,
+                    score_cp: None,
+                    mate: Some(3),
+                    pv: vec!["d2d4".into()],
+                },
+            ),
+            (
+                3,
+                ParsedInfo {
+                    multi_pv: 3,
+                    depth: 18,
+                    score_cp: Some(-10),
+                    mate: None,
+                    pv: vec!["g1f3".into()],
+                },
+            ),
+        ]);
+        let evaluation = finish_evaluation(7, -1, variations, "e2e4").unwrap();
+        assert_eq!(evaluation.score_cp, Some(-40));
+        assert_eq!(evaluation.variations.len(), 3);
+        assert_eq!(evaluation.variations[1].rank, 2);
+        assert_eq!(evaluation.variations[1].mate, Some(-3));
+        assert_eq!(evaluation.variations[2].best_move.as_deref(), Some("g1f3"));
     }
 
     #[test]
@@ -678,22 +836,25 @@ fn main() {
 
         let mut session = UciSession::spawn(&executable).unwrap();
         session.handshake().unwrap();
-        session.configure().unwrap();
+        session.configure(3).unwrap();
         let active = AtomicBool::new(false);
         let evaluation = session
             .analyze_position(
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                 0,
                 12,
+                3,
                 &active,
             )
             .unwrap()
             .unwrap();
         assert_eq!(evaluation.score_cp, Some(42));
         assert_eq!(evaluation.best_move.as_deref(), Some("e2e4"));
+        assert_eq!(evaluation.variations.len(), 3);
+        assert_eq!(evaluation.variations[1].score_cp, Some(18));
 
         let terminal = session
-            .analyze_position("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", 1, 12, &active)
+            .analyze_position("7k/6Q1/6K1/8/8/8/8/8 b - - 0 1", 1, 12, 3, &active)
             .unwrap()
             .unwrap();
         assert_eq!(terminal.mate, Some(0));
@@ -705,6 +866,7 @@ fn main() {
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                 2,
                 12,
+                3,
                 &cancelled,
             )
             .unwrap()
@@ -723,12 +885,13 @@ fn main() {
         let canonical = canonical_engine_path(&path).unwrap();
         let mut session = UciSession::spawn(&canonical).unwrap();
         session.handshake().unwrap();
-        session.configure().unwrap();
+        session.configure(3).unwrap();
         let evaluation = session
             .analyze_position(
                 "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
                 0,
                 8,
+                3,
                 &AtomicBool::new(false),
             )
             .unwrap()
@@ -737,12 +900,15 @@ fn main() {
         assert!(evaluation.depth >= 8);
         assert!(evaluation.best_move.is_some());
         assert!(!evaluation.pv.is_empty());
+        assert_eq!(evaluation.variations.len(), 3);
+        assert_eq!(evaluation.variations[2].rank, 3);
 
         let terminal = session
             .analyze_position(
                 "7k/6Q1/6K1/8/8/8/8/8 b - - 0 1",
                 1,
                 8,
+                3,
                 &AtomicBool::new(false),
             )
             .unwrap()

@@ -138,7 +138,7 @@ export function buildTrainingPuzzles(
 ): TrainingPuzzle[] {
   const gamesByFingerprint = new Map(games.map((game) => [game.fingerprint, game]));
   const puzzles: TrainingPuzzle[] = [];
-  for (const cache of caches) {
+  for (const cache of latestCacheByAnalysisIdentity(caches).values()) {
     const game = gamesByFingerprint.get(cache.gameFingerprint);
     if (
       !game
@@ -422,6 +422,23 @@ function latestCacheByGame(caches: StoredAnalysisCache[]): Map<string, StoredAna
   return latest;
 }
 
+function latestCacheByAnalysisIdentity(
+  caches: StoredAnalysisCache[],
+): Map<string, StoredAnalysisCache> {
+  const latest = new Map<string, StoredAnalysisCache>();
+  for (const cache of caches) {
+    const key = [
+      cache.gameFingerprint,
+      cache.engineName,
+      cache.engineVersion,
+      cache.profile,
+    ].join("\u0000");
+    const existing = latest.get(key);
+    if (!existing || cache.analyzedAt > existing.analyzedAt) latest.set(key, cache);
+  }
+  return latest;
+}
+
 function isCompleteAnalysisCache(
   game: StoredGame,
   cache: StoredAnalysisCache,
@@ -435,6 +452,7 @@ function isCompleteAnalysisCache(
       || evaluation.engineName !== cache.engineName
       || evaluation.engineVersion !== cache.engineVersion
       || evaluation.profile !== cache.profile
+      || evaluation.multiPv !== cache.multiPv
       || evaluation.positionIndex < 0
       || evaluation.positionIndex >= game.positions.length
       || indexes.has(evaluation.positionIndex)

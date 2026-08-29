@@ -5,6 +5,7 @@ import type {
   AnalysisProfileId,
   AnalysisSnapshot,
   EngineInfo,
+  MultiPv,
   PositionEvaluation,
   StoredGame,
 } from "../../types";
@@ -90,6 +91,7 @@ export function EnginePanel({
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("loading");
   const [profileId, setProfileId] = useState<AnalysisProfileId>("balanced");
+  const [multiPv, setMultiPv] = useState<MultiPv>(1);
   const [evaluationCache, setEvaluationCache] = useState<EvaluationCacheState>({
     key: null,
     values: [],
@@ -111,7 +113,7 @@ export function EnginePanel({
 
   const profile = ANALYSIS_PROFILES.find((item) => item.id === profileId) ?? ANALYSIS_PROFILES[1];
   const activeCacheKey = engine
-    ? [game.fingerprint, engine.name, engine.version, profileId].join("\u0000")
+    ? [game.fingerprint, engine.name, engine.version, profileId, multiPv].join("\u0000")
     : null;
   const evaluations = useMemo(
     () => evaluationCache.key === activeCacheKey ? evaluationCache.values : [],
@@ -129,15 +131,23 @@ export function EnginePanel({
       engineStatus,
       loading: isCacheLoading,
       profile: profileId,
+      multiPv,
     });
-  }, [activeCacheKey, engineStatus, evaluations, isCacheLoading, onAnalysisStateChange, profileId]);
+  }, [activeCacheKey, engineStatus, evaluations, isCacheLoading, multiPv, onAnalysisStateChange, profileId]);
 
   useEffect(() => {
     let active = true;
-    repository.getSetting("analysisProfile")
-      .then((saved) => {
-        if (active && ANALYSIS_PROFILES.some((item) => item.id === saved)) {
-          setProfileId(saved as AnalysisProfileId);
+    Promise.all([
+      repository.getSetting("analysisProfile"),
+      repository.getSetting("analysisMultiPv"),
+    ])
+      .then(([savedProfile, savedMultiPv]) => {
+        if (active && ANALYSIS_PROFILES.some((item) => item.id === savedProfile)) {
+          setProfileId(savedProfile as AnalysisProfileId);
+        }
+        const parsedMultiPv = Number(savedMultiPv);
+        if (active && (parsedMultiPv === 1 || parsedMultiPv === 2 || parsedMultiPv === 3)) {
+          setMultiPv(parsedMultiPv);
         }
       })
       .catch(() => undefined);
@@ -183,7 +193,7 @@ export function EnginePanel({
     if (!engine) {
       return () => { active = false; };
     }
-    repository.getAnalysis(game.fingerprint, engine, profileId)
+    repository.getAnalysis(game.fingerprint, engine, profileId, multiPv)
       .then((stored) => {
         if (active) {
           setEvaluationCache({ key: activeCacheKey, values: stored, loading: false });
@@ -196,7 +206,7 @@ export function EnginePanel({
         }
       });
     return () => { active = false; };
-  }, [activeCacheKey, engine, exposeError, game.fingerprint, profileId, repository]);
+  }, [activeCacheKey, engine, exposeError, game.fingerprint, multiPv, profileId, repository]);
 
   const chooseEngine = useCallback(async () => {
     setErrorKey(null);
@@ -211,6 +221,7 @@ export function EnginePanel({
         engineStatus: "ready",
         loading: true,
         profile: profileId,
+        multiPv,
       });
       setEngine(selected);
       setEngineStatus("ready");
@@ -218,7 +229,7 @@ export function EnginePanel({
       setEngineStatus("error");
       exposeError(localizedEngineError(engineErrorCode(error)));
     }
-  }, [exposeError, onAnalysisStateChange, profileId, repository]);
+  }, [exposeError, multiPv, onAnalysisStateChange, profileId, repository]);
 
   const changeProfile = useCallback(async (next: AnalysisProfileId) => {
     onAnalysisStateChange?.({
@@ -227,10 +238,24 @@ export function EnginePanel({
       engineStatus: "ready",
       loading: true,
       profile: next,
+      multiPv,
     });
     setProfileId(next);
     await repository.setSetting("analysisProfile", next);
-  }, [onAnalysisStateChange, repository]);
+  }, [multiPv, onAnalysisStateChange, repository]);
+
+  const changeMultiPv = useCallback(async (next: MultiPv) => {
+    onAnalysisStateChange?.({
+      cacheKey: null,
+      evaluations: [],
+      engineStatus: "ready",
+      loading: true,
+      profile: profileId,
+      multiPv: next,
+    });
+    setMultiPv(next);
+    await repository.setSetting("analysisMultiPv", String(next));
+  }, [onAnalysisStateChange, profileId, repository]);
 
   const runAnalysis = useCallback(async (replace: boolean) => {
     if (!engine || !activeCacheKey || isAnalyzing || isCacheLoading) return;
@@ -244,13 +269,14 @@ export function EnginePanel({
       engineStatus: "ready",
       loading: true,
       profile: profileId,
+      multiPv,
     });
     setEvaluationCache({ key: activeCacheKey, values: baseline, loading: true });
     let unsubscribe: () => void = () => undefined;
     try {
       if (replace) {
         try {
-          await repository.clearAnalysis(game.fingerprint, engine, profileId);
+          await repository.clearAnalysis(game.fingerprint, engine, profileId, multiPv);
         } catch {
           throw new Error("engine_cache");
         }
@@ -274,6 +300,7 @@ export function EnginePanel({
           game.fingerprint,
           engine,
           profileId,
+          multiPv,
           [update.evaluation],
         );
       });
@@ -282,11 +309,12 @@ export function EnginePanel({
         enginePath: engine.path,
         gameResult: game.result,
         depth: profile.depth,
+        multiPv,
         positions: game.positions,
         positionIndexes,
       });
-      await repository.saveEvaluations(game.fingerprint, engine, profileId, response.evaluations);
-      const stored = await repository.getAnalysis(game.fingerprint, engine, profileId);
+      await repository.saveEvaluations(game.fingerprint, engine, profileId, multiPv, response.evaluations);
+      const stored = await repository.getAnalysis(game.fingerprint, engine, profileId, multiPv);
       setEvaluationCache({ key: activeCacheKey, values: stored, loading: false });
       if (response.cancelled) exposeError("engineAnalysisCancelled");
     } catch (error) {
@@ -301,7 +329,7 @@ export function EnginePanel({
       setIsCancelling(false);
       setProgress(null);
     }
-  }, [activeCacheKey, engine, evaluations, exposeError, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, onAnalysisStateChange, profile.depth, profileId, repository]);
+  }, [activeCacheKey, engine, evaluations, exposeError, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, multiPv, onAnalysisStateChange, profile.depth, profileId, repository]);
 
   const stopAnalysis = useCallback(async () => {
     if (!analysisIdRef.current) return;
@@ -373,6 +401,22 @@ export function EnginePanel({
         >
           {profileOptions.map((item) => (
             <option key={item.id} value={item.id}>{item.label} · {t("depth", { count: item.depth })}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="engine-profile-row">
+        <label htmlFor={compact ? "analysis-lines-compact" : "analysis-lines"}>{t("analysisLines")}</label>
+        <select
+          id={compact ? "analysis-lines-compact" : "analysis-lines"}
+          value={multiPv}
+          disabled={isAnalyzing}
+          onChange={(event) => void changeMultiPv(Number(event.target.value) as MultiPv)}
+        >
+          {[1, 2, 3].map((count) => (
+            <option key={count} value={count}>
+              {count === 1 ? t("analysisLineSingle") : t("analysisLinePlural", { count })}
+            </option>
           ))}
         </select>
       </div>

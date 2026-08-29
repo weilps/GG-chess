@@ -5,13 +5,20 @@ import type {
   StoredAnalysisCache,
   TrainingActivity,
 } from "../db/gameRepository";
-import type { Language, StoredGame, StoredPositionEvaluation } from "../../types";
+import type {
+  Language,
+  MultiPv,
+  RankedVariation,
+  StoredGame,
+  StoredPositionEvaluation,
+} from "../../types";
 
-export const BACKUP_SCHEMA_VERSION = 1 as const;
+export const BACKUP_SCHEMA_VERSION = 2 as const;
 export const MAX_PORTABLE_FILE_BYTES = 50 * 1024 * 1024;
 
 export const PORTABLE_SETTING_KEYS = [
   "analysisProfile",
+  "analysisMultiPv",
   "chessComUsername",
   "trainingPlayerNames",
   "trainingCoachProfile",
@@ -109,11 +116,39 @@ export function parsePortableBackup(contents: string): PortableBackup {
   } catch {
     throw new PortableDataError("invalidJson");
   }
-  if (!isRecord(value) || value.schemaVersion !== BACKUP_SCHEMA_VERSION) {
+  if (!isRecord(value) || (value.schemaVersion !== 1 && value.schemaVersion !== BACKUP_SCHEMA_VERSION)) {
     throw new PortableDataError("unsupportedSchema");
   }
-  if (!isPortableBackup(value)) throw new PortableDataError("invalidData");
-  return value;
+  const migrated = value.schemaVersion === 1 ? migrateLegacyBackup(value) : value;
+  if (!isPortableBackup(migrated)) throw new PortableDataError("invalidData");
+  return migrated;
+}
+
+function migrateLegacyBackup(value: Record<string, unknown>): unknown {
+  const caches = Array.isArray(value.analysisCaches)
+    ? value.analysisCaches.map((cache) => {
+      if (!isRecord(cache)) return cache;
+      const evaluations = Array.isArray(cache.evaluations)
+        ? cache.evaluations.map((evaluation) => {
+          if (!isRecord(evaluation)) return evaluation;
+          return {
+            ...evaluation,
+            multiPv: 1,
+            variations: [{
+              rank: 1,
+              scoreCp: evaluation.scoreCp,
+              mate: evaluation.mate,
+              depth: evaluation.depth,
+              bestMove: evaluation.bestMove,
+              pv: evaluation.pv,
+            }],
+          };
+        })
+        : cache.evaluations;
+      return { ...cache, multiPv: 1, evaluations };
+    })
+    : value.analysisCaches;
+  return { ...value, schemaVersion: BACKUP_SCHEMA_VERSION, analysisCaches: caches };
 }
 
 export function exportPgnArchive(games: StoredGame[]): string {
@@ -191,6 +226,7 @@ function isAnalysisCache(value: unknown, positionCounts: Map<string, number>): v
     || !isBoundedString(value.engineName, 256)
     || !isBoundedString(value.engineVersion, 128)
     || !["quick", "balanced", "deep"].includes(String(value.profile))
+    || !isMultiPv(value.multiPv)
     || !isIsoDate(value.analyzedAt)
     || !Array.isArray(value.evaluations)
     || value.evaluations.length > 2_001
@@ -210,6 +246,7 @@ function isEvaluation(
     && value.engineName === cache.engineName
     && value.engineVersion === cache.engineVersion
     && value.profile === cache.profile
+    && value.multiPv === cache.multiPv
     && Number.isInteger(value.positionIndex)
     && Number(value.positionIndex) >= 0
     && Number(value.positionIndex) < positionCount
@@ -219,7 +256,41 @@ function isEvaluation(
     && Number(value.depth) >= 0
     && isNullableBoundedString(value.bestMove, 16)
     && isStringArray(value.pv, 512, 16)
+    && Array.isArray(value.variations)
+    && value.variations.length >= 1
+    && value.variations.length <= Number(cache.multiPv)
+    && value.variations.every((variation, index) => (
+      isVariation(variation)
+      && variation.rank === index + 1
+    ))
+    && evaluationMatchesRankOne(value, value.variations[0])
     && isIsoDate(value.analyzedAt);
+}
+
+function isVariation(value: unknown): value is RankedVariation {
+  if (!isRecord(value)) return false;
+  return isMultiPv(value.rank)
+    && isNullableInteger(value.scoreCp)
+    && isNullableInteger(value.mate)
+    && Number.isInteger(value.depth)
+    && Number(value.depth) >= 0
+    && isNullableBoundedString(value.bestMove, 16)
+    && isStringArray(value.pv, 512, 16);
+}
+
+function evaluationMatchesRankOne(
+  evaluation: Record<string, unknown>,
+  rankOne: RankedVariation,
+): boolean {
+  return evaluation.scoreCp === rankOne.scoreCp
+    && evaluation.mate === rankOne.mate
+    && evaluation.depth === rankOne.depth
+    && evaluation.bestMove === rankOne.bestMove
+    && JSON.stringify(evaluation.pv) === JSON.stringify(rankOne.pv);
+}
+
+function isMultiPv(value: unknown): value is MultiPv {
+  return value === 1 || value === 2 || value === 3;
 }
 
 function isChessComSyncState(value: unknown): value is ChessComMonthSyncState {
