@@ -42,7 +42,7 @@ describe("ReviewScreen", () => {
 
   it("flips the board", () => {
     render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
-    fireEvent.click(screen.getByText(/flip board/i));
+    fireEvent.click(screen.getByRole("button", { name: "Flip board" }));
     expect(screen.getByTestId("board-orientation")).toHaveAttribute("data-orientation", "black");
   });
 
@@ -50,7 +50,9 @@ describe("ReviewScreen", () => {
     render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
 
     expect(screen.getAllByLabelText("Not rated")).toHaveLength(game.moves.length);
+    fireEvent.click(screen.getByRole("tab", { name: "Summary" }));
     expect(screen.getAllByText("—", { selector: ".accuracy-sides strong" })).toHaveLength(2);
+    fireEvent.click(screen.getByRole("tab", { name: "Moves" }));
     fireEvent.click(screen.getByText("e4"));
     expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Not rated");
     expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Analyze both adjacent positions to rate this move.");
@@ -69,5 +71,49 @@ describe("ReviewScreen", () => {
     expect(screen.getByText("Analysis is available only for completed games.")).toBeInTheDocument();
     expect(screen.getByText("Coach guidance is available only for completed games.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "Analyze" })).not.toBeInTheDocument();
+  });
+
+  it("keeps moves as the default tab and supports keyboard tab navigation", () => {
+    render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+
+    const movesTab = screen.getByRole("tab", { name: "Moves" });
+    expect(movesTab).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Moves" })).toBeInTheDocument();
+    fireEvent.keyDown(movesTab, { key: "ArrowRight" });
+    expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tabpanel", { name: "Summary" })).toBeInTheDocument();
+  });
+
+  it("keeps language and secondary destinations available in the review header", () => {
+    const onLanguageChange = vi.fn();
+    const onOpenTraining = vi.fn();
+    const onOpenAbout = vi.fn();
+    render(
+      <ReviewScreen
+        game={game}
+        repository={repository}
+        language="en"
+        onLanguageChange={onLanguageChange}
+        onBack={vi.fn()}
+        onOpenTraining={onOpenTraining}
+        onOpenAbout={onOpenAbout}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "FR" }));
+    expect(onLanguageChange).toHaveBeenCalledWith("fr");
+    const moreButton = screen.getByRole("button", { name: "More" });
+    fireEvent.click(moreButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "Training Lab" }));
+    fireEvent.click(moreButton);
+    fireEvent.click(screen.getByRole("menuitem", { name: "About" }));
+    expect(onOpenTraining).toHaveBeenCalledOnce();
+    expect(onOpenAbout).toHaveBeenCalledOnce();
+
+    fireEvent.click(moreButton);
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("menu")).not.toBeInTheDocument();
+    expect(moreButton).toHaveFocus();
   });
 });

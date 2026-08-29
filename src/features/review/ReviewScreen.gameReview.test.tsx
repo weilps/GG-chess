@@ -94,6 +94,7 @@ describe("ReviewScreen Game Review integration", () => {
     fireEvent.click(firstMovePoint);
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
 
+    fireEvent.click(screen.getByRole("tab", { name: "Summary" }));
     fireEvent.click(screen.getByRole("button", {
       name: "Black, move 1 e5, Inaccuracy, 100 cp",
     }));

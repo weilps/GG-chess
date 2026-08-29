@@ -42,6 +42,8 @@ describe("EvaluationChart", () => {
     expect(onSelectPosition).toHaveBeenNthCalledWith(1, 1);
     expect(onSelectPosition).toHaveBeenNthCalledWith(2, 1);
     expect(screen.getByRole("button", { name: /Starting position/ })).toHaveAttribute("aria-current", "true");
+    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("stroke-width", "44");
+    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("vector-effect", "non-scaling-stroke");
     expect(screen.getByText("Best")).toBeInTheDocument();
   });
 
@@ -59,5 +61,32 @@ describe("EvaluationChart", () => {
     );
     expect(screen.getByText("Analysez des positions pour révéler le déroulement de la partie.")).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /Position/ })).not.toBeInTheDocument();
+  });
+
+  it("keeps compact extreme hit targets inside the clipped chart bounds", () => {
+    render(
+      <EvaluationChart
+        compact
+        evaluations={[
+          { ...evaluations[0], scoreCp: 1000 },
+          { ...evaluations[1], scoreCp: -1000 },
+        ]}
+        ratings={ratings}
+        moves={["e4"]}
+        gameResult="1-0"
+        selectedPositionIndex={0}
+        onSelectPosition={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    const firstHitTarget = screen.getByRole("button", { name: /Starting position/ })
+      .querySelector(".evaluation-point-hit");
+    const lastHitTarget = screen.getByRole("button", { name: /Position 1/ })
+      .querySelector(".evaluation-point-hit");
+    expect(firstHitTarget).toHaveAttribute("cx", "64");
+    expect(firstHitTarget).toHaveAttribute("cy", "64");
+    expect(lastHitTarget).toHaveAttribute("cx", "656");
+    expect(lastHitTarget).toHaveAttribute("cy", "126");
   });
 });
