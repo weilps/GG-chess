@@ -197,6 +197,7 @@ describe("EnginePanel", () => {
     fireEvent.change(screen.getByLabelText("Candidate lines"), { target: { value: "2" } });
     const analyzeButton = await screen.findByRole("button", { name: "Analyze" });
     await waitFor(() => expect(analyzeButton).toBeEnabled());
+    expect(screen.getByRole("status")).toHaveTextContent("selected 2-line guidance cache");
     fireEvent.click(analyzeButton);
     await waitFor(() => expect(mocks.analyzePositions).toHaveBeenCalledWith(
       expect.objectContaining({ multiPv: 2 }),
@@ -241,6 +242,8 @@ describe("EnginePanel", () => {
       loading: true,
       profile: "balanced",
       multiPv: 1,
+      guidanceEnabled: true,
+      guidanceMode: "next",
     });
     await waitFor(() => expect(onAnalysisStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
       loading: true,
@@ -297,6 +300,26 @@ describe("EnginePanel", () => {
     fireEvent.click(outsideButton);
     expect(screen.queryByRole("dialog", { name: "Local analysis" })).not.toBeInTheDocument();
     await waitFor(() => expect(settingsButton).toHaveFocus());
+  });
+
+  it("persists arrow visibility and mode with accessible controls", async () => {
+    const repository = new MemoryGameRepository();
+    await repository.setSetting("guidanceEnabled", "false");
+    await repository.setSetting("guidanceMode", "compare");
+    render(<EnginePanel game={game} positionIndex={0} repository={repository} t={t} />);
+
+    const checkbox = screen.getByRole("checkbox", { name: "Show guidance arrows" });
+    const mode = screen.getByRole("combobox", { name: "Arrow mode" });
+    await waitFor(() => expect(checkbox).not.toBeChecked());
+    expect(mode).toBeDisabled();
+    expect(mode).toHaveValue("compare");
+
+    fireEvent.click(checkbox);
+    fireEvent.change(mode, { target: { value: "next" } });
+    await waitFor(async () => {
+      expect(await repository.getSetting("guidanceEnabled")).toBe("true");
+      expect(await repository.getSetting("guidanceMode")).toBe("next");
+    });
   });
 
   it("automatically exposes compact analysis failures and keeps their status on Settings", async () => {

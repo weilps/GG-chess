@@ -38,6 +38,8 @@ vi.mock("../engine/EnginePanel", async () => {
     engineStatus: "ready",
     loading: false,
     multiPv: 1,
+    guidanceEnabled: true,
+    guidanceMode: "next",
     evaluations: [
       evaluation(0, 100, "e2e4", ["e2e4", "e7e5"]),
       evaluation(1, 50, "c7c5", ["c7c5", "g1f3"]),
@@ -50,16 +52,23 @@ vi.mock("../engine/EnginePanel", async () => {
     }) => {
       useEffect(() => onAnalysisStateChange?.(snapshot), [onAnalysisStateChange]);
       return (
-        <button onClick={() => onAnalysisStateChange?.({
-          cacheKey: null,
-          profile: "deep",
-          engineStatus: "ready",
-          loading: true,
-          multiPv: 1,
-          evaluations: [],
-        })}>
-          Switch profile fixture
-        </button>
+        <>
+          <button onClick={() => onAnalysisStateChange?.({ ...snapshot, guidanceMode: "compare" })}>
+            Compare fixture
+          </button>
+          <button onClick={() => onAnalysisStateChange?.({
+            cacheKey: null,
+            profile: "deep",
+            engineStatus: "ready",
+            loading: true,
+            multiPv: 1,
+            guidanceEnabled: true,
+            guidanceMode: "next",
+            evaluations: [],
+          })}>
+            Switch profile fixture
+          </button>
+        </>
       );
     },
   };
@@ -106,6 +115,7 @@ describe("ReviewScreen Game Review integration", () => {
     });
     fireEvent.click(firstMovePoint);
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
+    expect(screen.getByTestId("guidance-arrow-1")).toHaveAttribute("data-source", "c7");
 
     fireEvent.click(screen.getByRole("tab", { name: "Summary" }));
     fireEvent.click(screen.getByRole("button", {
@@ -117,6 +127,11 @@ describe("ReviewScreen Game Review integration", () => {
     expect(coach).toHaveTextContent("Played e5");
     expect(coach).toHaveTextContent("c5 Nf3");
     expect(screen.getByTestId("codex-adviser-request")).toHaveTextContent("e5:inaccuracy");
+
+    fireEvent.click(screen.getByRole("button", { name: "Compare fixture" }));
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
+    expect(screen.getByTestId("position-status")).toHaveTextContent("position before the move");
+    expect(screen.getByTestId("guidance-arrow-played")).toHaveAttribute("data-tone", "warning");
 
     fireEvent.click(screen.getByRole("button", { name: "Switch profile fixture" }));
     await waitFor(() => expect(screen.getByText("Analyze positions to reveal the course of the game.")).toBeInTheDocument());

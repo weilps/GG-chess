@@ -12,9 +12,11 @@ use tauri::Manager;
 
 const BACKUP_SCHEMA_VERSION: u32 = 2;
 const MAX_PORTABLE_BYTES: usize = 50 * 1024 * 1024;
-const PORTABLE_SETTINGS: [&str; 5] = [
+const PORTABLE_SETTINGS: [&str; 7] = [
     "analysisProfile",
     "analysisMultiPv",
+    "guidanceEnabled",
+    "guidanceMode",
     "chessComUsername",
     "trainingPlayerNames",
     "trainingCoachProfile",

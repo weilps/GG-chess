@@ -5,6 +5,7 @@ import type {
   AnalysisProfileId,
   AnalysisSnapshot,
   EngineInfo,
+  GuidanceMode,
   MultiPv,
   PositionEvaluation,
   StoredGame,
@@ -92,6 +93,9 @@ export function EnginePanel({
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("loading");
   const [profileId, setProfileId] = useState<AnalysisProfileId>("balanced");
   const [multiPv, setMultiPv] = useState<MultiPv>(1);
+  const [guidanceEnabled, setGuidanceEnabled] = useState(true);
+  const [guidanceMode, setGuidanceMode] = useState<GuidanceMode>("next");
+  const [settingsLoaded, setSettingsLoaded] = useState(false);
   const [evaluationCache, setEvaluationCache] = useState<EvaluationCacheState>({
     key: null,
     values: [],
@@ -121,7 +125,10 @@ export function EnginePanel({
   );
   const isCacheLoading = activeCacheKey !== null
     && (evaluationCache.key !== activeCacheKey || evaluationCache.loading);
-  const currentEvaluation = evaluations.find((item) => item.positionIndex === positionIndex);
+  const displayedPositionIndex = guidanceMode === "compare" && positionIndex > 0
+    ? positionIndex - 1
+    : positionIndex;
+  const currentEvaluation = evaluations.find((item) => item.positionIndex === displayedPositionIndex);
   const complete = evaluations.length === game.positions.length;
 
   useEffect(() => {
@@ -129,19 +136,23 @@ export function EnginePanel({
       cacheKey: activeCacheKey,
       evaluations,
       engineStatus,
-      loading: isCacheLoading,
+      loading: isCacheLoading || !settingsLoaded,
       profile: profileId,
       multiPv,
+      guidanceEnabled,
+      guidanceMode,
     });
-  }, [activeCacheKey, engineStatus, evaluations, isCacheLoading, multiPv, onAnalysisStateChange, profileId]);
+  }, [activeCacheKey, engineStatus, evaluations, guidanceEnabled, guidanceMode, isCacheLoading, multiPv, onAnalysisStateChange, profileId, settingsLoaded]);
 
   useEffect(() => {
     let active = true;
     Promise.all([
       repository.getSetting("analysisProfile"),
       repository.getSetting("analysisMultiPv"),
+      repository.getSetting("guidanceEnabled"),
+      repository.getSetting("guidanceMode"),
     ])
-      .then(([savedProfile, savedMultiPv]) => {
+      .then(([savedProfile, savedMultiPv, savedGuidanceEnabled, savedGuidanceMode]) => {
         if (active && ANALYSIS_PROFILES.some((item) => item.id === savedProfile)) {
           setProfileId(savedProfile as AnalysisProfileId);
         }
@@ -149,8 +160,17 @@ export function EnginePanel({
         if (active && (parsedMultiPv === 1 || parsedMultiPv === 2 || parsedMultiPv === 3)) {
           setMultiPv(parsedMultiPv);
         }
+        if (active && savedGuidanceEnabled !== null) {
+          setGuidanceEnabled(savedGuidanceEnabled !== "false");
+        }
+        if (active && (savedGuidanceMode === "next" || savedGuidanceMode === "compare")) {
+          setGuidanceMode(savedGuidanceMode);
+        }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (active) setSettingsLoaded(true);
+      });
     return () => { active = false; };
   }, [repository]);
 
@@ -222,6 +242,8 @@ export function EnginePanel({
         loading: true,
         profile: profileId,
         multiPv,
+        guidanceEnabled,
+        guidanceMode,
       });
       setEngine(selected);
       setEngineStatus("ready");
@@ -229,7 +251,7 @@ export function EnginePanel({
       setEngineStatus("error");
       exposeError(localizedEngineError(engineErrorCode(error)));
     }
-  }, [exposeError, multiPv, onAnalysisStateChange, profileId, repository]);
+  }, [exposeError, guidanceEnabled, guidanceMode, multiPv, onAnalysisStateChange, profileId, repository]);
 
   const changeProfile = useCallback(async (next: AnalysisProfileId) => {
     onAnalysisStateChange?.({
@@ -239,10 +261,12 @@ export function EnginePanel({
       loading: true,
       profile: next,
       multiPv,
+      guidanceEnabled,
+      guidanceMode,
     });
     setProfileId(next);
     await repository.setSetting("analysisProfile", next);
-  }, [multiPv, onAnalysisStateChange, repository]);
+  }, [guidanceEnabled, guidanceMode, multiPv, onAnalysisStateChange, repository]);
 
   const changeMultiPv = useCallback(async (next: MultiPv) => {
     onAnalysisStateChange?.({
@@ -252,10 +276,22 @@ export function EnginePanel({
       loading: true,
       profile: profileId,
       multiPv: next,
+      guidanceEnabled,
+      guidanceMode,
     });
     setMultiPv(next);
     await repository.setSetting("analysisMultiPv", String(next));
-  }, [onAnalysisStateChange, profileId, repository]);
+  }, [guidanceEnabled, guidanceMode, onAnalysisStateChange, profileId, repository]);
+
+  const changeGuidanceEnabled = useCallback(async (enabled: boolean) => {
+    setGuidanceEnabled(enabled);
+    await repository.setSetting("guidanceEnabled", String(enabled));
+  }, [repository]);
+
+  const changeGuidanceMode = useCallback(async (mode: GuidanceMode) => {
+    setGuidanceMode(mode);
+    await repository.setSetting("guidanceMode", mode);
+  }, [repository]);
 
   const runAnalysis = useCallback(async (replace: boolean) => {
     if (!engine || !activeCacheKey || isAnalyzing || isCacheLoading) return;
@@ -270,6 +306,8 @@ export function EnginePanel({
       loading: true,
       profile: profileId,
       multiPv,
+      guidanceEnabled,
+      guidanceMode,
     });
     setEvaluationCache({ key: activeCacheKey, values: baseline, loading: true });
     let unsubscribe: () => void = () => undefined;
@@ -329,7 +367,7 @@ export function EnginePanel({
       setIsCancelling(false);
       setProgress(null);
     }
-  }, [activeCacheKey, engine, evaluations, exposeError, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, multiPv, onAnalysisStateChange, profile.depth, profileId, repository]);
+  }, [activeCacheKey, engine, evaluations, exposeError, game.fingerprint, game.positions, game.result, guidanceEnabled, guidanceMode, isAnalyzing, isCacheLoading, multiPv, onAnalysisStateChange, profile.depth, profileId, repository]);
 
   const stopAnalysis = useCallback(async () => {
     if (!analysisIdRef.current) return;
@@ -405,6 +443,31 @@ export function EnginePanel({
         </select>
       </div>
 
+      <fieldset className="guidance-settings">
+        <legend>{t("guidanceSettings")}</legend>
+        <label className="guidance-toggle">
+          <input
+            type="checkbox"
+            checked={guidanceEnabled}
+            onChange={(event) => void changeGuidanceEnabled(event.target.checked)}
+          />
+          <span>{t("guidanceEnabled")}</span>
+        </label>
+        <label className="guidance-mode-control" htmlFor={compact ? "guidance-mode-compact" : "guidance-mode"}>
+          <span>{t("guidanceMode")}</span>
+          <select
+            id={compact ? "guidance-mode-compact" : "guidance-mode"}
+            value={guidanceMode}
+            disabled={!guidanceEnabled}
+            onChange={(event) => void changeGuidanceMode(event.target.value as GuidanceMode)}
+          >
+            <option value="next">{t("guidanceModeNext")}</option>
+            <option value="compare">{t("guidanceModeCompare")}</option>
+          </select>
+        </label>
+        <small>{t("guidanceLegend")}</small>
+      </fieldset>
+
       <div className="engine-profile-row">
         <label htmlFor={compact ? "analysis-lines-compact" : "analysis-lines"}>{t("analysisLines")}</label>
         <select
@@ -451,6 +514,11 @@ export function EnginePanel({
       {engineStatus === "loading" && <p className="analysis-cache-status">{t("detectingEngine")}</p>}
       {engineStatus === "ready" && isCacheLoading ? (
         <p className="analysis-cache-status">{t("loadingAnalysisCache")}</p>
+      ) : null}
+      {engineStatus === "ready" && !isCacheLoading && evaluations.length === 0 ? (
+        <p className="analysis-required-message" role="status">
+          {t("analysisRequiredForLines", { count: multiPv })}
+        </p>
       ) : null}
     </>
   );

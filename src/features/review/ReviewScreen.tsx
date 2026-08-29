@@ -9,6 +9,8 @@ import { MoveRatingBadge } from "../classification/MoveRatings";
 import { CoachPanel, type CoachEmptyState } from "../coach/CoachPanel";
 import { buildCoachInsight } from "../coach/coachInsight";
 import { EnginePanel } from "../engine/EnginePanel";
+import { BoardGuidanceOverlay } from "./BoardGuidanceOverlay";
+import { buildBoardGuidance } from "./boardGuidance";
 import { EvaluationBar } from "./EvaluationBar";
 import { EvaluationChart } from "./EvaluationChart";
 import { GameReviewSummary } from "./GameReviewSummary";
@@ -82,6 +84,8 @@ export function ReviewScreen({
     loading: true,
     profile: "balanced",
     multiPv: 1,
+    guidanceEnabled: true,
+    guidanceMode: "next",
   });
   const lastPositionIndex = game.positions.length - 1;
   const isCompletedGame = ["1-0", "0-1", "1/2-1/2"].includes(game.result);
@@ -149,6 +153,17 @@ export function ReviewScreen({
   );
   const accuracy = useMemo(() => calculateGameAccuracy(moveRatings), [moveRatings]);
   const selectedRating = positionIndex > 0 ? moveRatings[positionIndex - 1] ?? null : null;
+  const guidancePlan = useMemo(() => buildBoardGuidance({
+    enabled: analysisSnapshot.guidanceEnabled,
+    engineStatus: analysisSnapshot.engineStatus,
+    evaluations: activeEvaluations,
+    game,
+    loading: analysisSnapshot.loading,
+    mode: analysisSnapshot.guidanceMode,
+    multiPv: analysisSnapshot.multiPv,
+    positionIndex,
+    selectedRating,
+  }), [activeEvaluations, analysisSnapshot.engineStatus, analysisSnapshot.guidanceEnabled, analysisSnapshot.guidanceMode, analysisSnapshot.loading, analysisSnapshot.multiPv, game, positionIndex, selectedRating]);
   const coachInsight = useMemo(
     () => isCompletedGame
       && selectedRating
@@ -163,7 +178,7 @@ export function ReviewScreen({
     [coachInsight, game, language],
   );
   const selectedEvaluation = activeEvaluations.find(
-    (evaluation) => evaluation.positionIndex === positionIndex,
+    (evaluation) => evaluation.positionIndex === guidancePlan.boardPositionIndex,
   ) ?? null;
   const coachEmptyState: CoachEmptyState = !isCompletedGame
     ? "unfinishedGame"
@@ -261,7 +276,7 @@ export function ReviewScreen({
               <Chessboard
                 options={{
                   id: `chessmate-${game.fingerprint}`,
-                  position: game.positions[positionIndex],
+                  position: game.positions[guidancePlan.boardPositionIndex],
                   boardOrientation: orientation,
                   allowDragging: false,
                   allowDrawingArrows: false,
@@ -272,13 +287,18 @@ export function ReviewScreen({
                   boardStyle: { borderRadius: "8px", overflow: "hidden" },
                 }}
               />
+              <BoardGuidanceOverlay arrows={guidancePlan.arrows} orientation={orientation} t={t} />
             </div>
           </div>
           <div className="position-controls" aria-label={t("review")}>
             <button onClick={() => goTo(0)} disabled={positionIndex === 0} aria-label={t("firstMove")}>|‹</button>
             <button onClick={() => goTo(positionIndex - 1)} disabled={positionIndex === 0} aria-label={t("previousMove")}>‹</button>
             <span aria-live="polite" data-testid="position-status">
-              {positionIndex === 0 ? t("startingPosition") : `${t("move")} ${positionIndex} ${t("of")} ${game.moves.length}`}
+              {positionIndex === 0
+                ? t("startingPosition")
+                : analysisSnapshot.guidanceMode === "compare"
+                  ? t("guidanceComparePosition", { move: positionIndex, total: game.moves.length })
+                  : `${t("move")} ${positionIndex} ${t("of")} ${game.moves.length}`}
             </span>
             <button onClick={() => goTo(positionIndex + 1)} disabled={positionIndex === lastPositionIndex} aria-label={t("nextMove")}>›</button>
             <button onClick={() => goTo(lastPositionIndex)} disabled={positionIndex === lastPositionIndex} aria-label={t("lastMove")}>›|</button>
