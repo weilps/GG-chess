@@ -152,7 +152,7 @@ describe("board guidance", () => {
     expect(plan.arrows).toEqual([]);
   });
 
-  it("mirrors geometry after Flip and exposes rank, width, opacity, and stacked labels", () => {
+  it("mirrors geometry after Flip and exposes rank, width, opacity, and accessible detail", () => {
     expect(squareCenter("a1", "white")).toEqual({ x: 50, y: 750 });
     expect(squareCenter("a1", "black")).toEqual({ x: 750, y: 50 });
     const arrows = [
@@ -167,12 +167,31 @@ describe("board guidance", () => {
     expect(rankTwo).toHaveAttribute("stroke-width", "13");
     expect(rankOne).toHaveAttribute("stroke-opacity", "0.94");
     expect(rankTwo).toHaveAttribute("stroke-opacity", "0.7");
-    expect(screen.getByTestId("guidance-label-1")).not.toHaveAttribute(
-      "data-label-y",
-      screen.getByTestId("guidance-label-2").getAttribute("data-label-y"),
-    );
-    expect(screen.getByRole("img", { name: "Stockfish guidance arrows" })).toHaveTextContent(
-      "Rank 1, evaluation +1.95, from a1 to a8.",
+    expect(screen.getByRole("img", { name: "Stockfish guidance arrows" })).toHaveAccessibleDescription(
+      /Rank 1, evaluation \+1\.95, from a1 to a8\./,
     );
   });
+
+  it.each(["white", "black"] as const)(
+    "keeps four shared edge-destination labels separate when oriented %s",
+    (orientation) => {
+      const arrows = [
+        { key: "one", sourceSquare: "a1", targetSquare: "a8", tone: "ranked" as const, rank: 1 as const, evaluation: "+1.95", played: false, warningSymbol: null },
+        { key: "two", sourceSquare: "b1", targetSquare: "a8", tone: "ranked" as const, rank: 2 as const, evaluation: "+1.20", played: false, warningSymbol: null },
+        { key: "three", sourceSquare: "c1", targetSquare: "a8", tone: "ranked" as const, rank: 3 as const, evaluation: "+0.80", played: false, warningSymbol: null },
+        { key: "played", sourceSquare: "d1", targetSquare: "a8", tone: "blunder" as const, rank: null, evaluation: null, played: true, warningSymbol: "!!" as const },
+      ];
+      render(<BoardGuidanceOverlay arrows={arrows} orientation={orientation} t={t} />);
+
+      const labelCenters = [
+        screen.getByTestId("guidance-label-1"),
+        screen.getByTestId("guidance-label-2"),
+        screen.getByTestId("guidance-label-3"),
+        screen.getByTestId("guidance-label-played"),
+      ].map((label) => Number(label.getAttribute("data-label-y"))).sort((left, right) => left - right);
+      expect(labelCenters[0]).toBeGreaterThanOrEqual(18);
+      expect(labelCenters[3]).toBeLessThanOrEqual(782);
+      expect(labelCenters.slice(1).every((center, index) => center - labelCenters[index] >= 36)).toBe(true);
+    },
+  );
 });

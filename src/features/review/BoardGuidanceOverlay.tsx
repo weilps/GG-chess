@@ -34,6 +34,7 @@ function arrowAppearance(arrow: GuidanceArrow) {
 export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOverlayProps) {
   const rawId = useId();
   const markerPrefix = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
+  const descriptionId = `${markerPrefix}-description`;
   const destinationIndexes = useMemo(() => {
     const seen = new Map<string, number>();
     return arrows.map((arrow) => {
@@ -51,8 +52,14 @@ export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOv
   if (arrows.length === 0) return null;
 
   return (
-    <div className="board-guidance" role="img" aria-label={t("guidanceOverlayLabel")}>
-      <svg viewBox="0 0 800 800" aria-hidden="true" preserveAspectRatio="none">
+    <div className="board-guidance">
+      <svg
+        viewBox="0 0 800 800"
+        role="img"
+        aria-label={t("guidanceOverlayLabel")}
+        aria-describedby={descriptionId}
+        preserveAspectRatio="none"
+      >
         <defs>
           {arrows.map((arrow, index) => {
             const appearance = arrowAppearance(arrow);
@@ -104,7 +111,13 @@ export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOv
           const total = destinationTotals.get(arrow.targetSquare) ?? 1;
           const labelIndex = destinationIndexes[index];
           const x = Math.min(734, Math.max(66, target.x));
-          const y = Math.min(780, Math.max(20, target.y + (labelIndex - (total - 1) / 2) * 34));
+          const labelSpacing = 36;
+          const idealGroupStart = target.y - ((total - 1) * labelSpacing) / 2;
+          const groupStart = Math.min(
+            782 - (total - 1) * labelSpacing,
+            Math.max(18, idealGroupStart),
+          );
+          const y = groupStart + labelIndex * labelSpacing;
           const appearance = arrowAppearance(arrow);
           const text = arrow.rank
             ? `${arrow.rank} · ${arrow.evaluation}${arrow.played ? ` · ${arrow.warningSymbol ?? "●"}` : ""}`
@@ -124,7 +137,7 @@ export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOv
           );
         })}
       </svg>
-      <span className="sr-only">
+      <span id={descriptionId} className="sr-only">
         {arrows.map((arrow) => arrow.rank
           ? t("guidanceRankedArrow", {
             rank: arrow.rank,
