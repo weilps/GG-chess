@@ -73,6 +73,8 @@ async function populatedRepository(): Promise<MemoryGameRepository> {
   });
   await repository.setSetting("analysisProfile", "balanced");
   await repository.setSetting("analysisMultiPv", "3");
+  await repository.setSetting("guidanceEnabled", "false");
+  await repository.setSetting("guidanceMode", "compare");
   await repository.setSetting("trainingCoachProfile", "playful");
   await repository.setSetting("enginePath", engine.path);
   await repository.setSetting("codexConsent", "true");
@@ -91,6 +93,8 @@ describe("portable ChessMate data", () => {
     expect(backup.settings).toEqual({
       analysisProfile: "balanced",
       analysisMultiPv: "3",
+      guidanceEnabled: "false",
+      guidanceMode: "compare",
       trainingCoachProfile: "playful",
     });
     expect(JSON.stringify(backup)).not.toContain("machine-only");

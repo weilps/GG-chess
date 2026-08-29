@@ -178,7 +178,10 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .review-workspace { width: min(1280px, 100%); margin: 0 auto; padding: 16px 20px 28px; display: grid; grid-template-columns: minmax(500px, 730px) minmax(300px, 1fr); gap: 18px; align-items: start; }
 .board-column { min-width: 0; }
 .board-stage { min-width: 0; display: grid; grid-template-columns: 36px minmax(0, 1fr); gap: 10px; align-items: stretch; }
-.board-frame { padding: 10px; border-radius: 14px; background: #fff; box-shadow: 0 22px 50px rgba(35, 54, 43, .16); }
+.board-frame { --board-padding: 10px; position: relative; padding: var(--board-padding); border-radius: 14px; background: #fff; box-shadow: 0 22px 50px rgba(35, 54, 43, .16); }
+.board-guidance { position: absolute; z-index: 5; inset: var(--board-padding); overflow: hidden; border-radius: 8px; pointer-events: none; }
+.board-guidance svg { width: 100%; height: 100%; display: block; overflow: visible; }
+.guidance-label text { font: 700 18px "Segoe UI", sans-serif; }
 .evaluation-bar { min-height: 320px; padding: 6px; border-radius: 11px; background: #25332b; box-shadow: 0 14px 34px rgba(35, 54, 43, .15); }
 .evaluation-bar-track { position: relative; width: 100%; height: 100%; min-height: inherit; overflow: hidden; border-radius: 6px; color: #f7f8f2; background: #26352d; }
 .evaluation-bar-white { position: absolute; right: 0; bottom: 0; left: 0; background: #f4f4ed; transition: height .18s ease; }
@@ -359,6 +362,14 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .engine-profile-row { display: grid; grid-template-columns: auto 1fr; align-items: center; gap: 10px; margin-top: 14px; }
 .engine-profile-row label { color: #68766f; font-size: 12px; font-weight: 700; }
 .engine-profile-row select { min-width: 0; padding: 7px 9px; border: 1px solid #cbd2c8; border-radius: 8px; color: #294838; background: #fff; }
+.guidance-settings { display: grid; gap: 10px; margin: 14px 0 0; padding: 12px; border: 1px solid #d7ded5; border-radius: 10px; background: #f1f4ee; }
+.guidance-settings legend { padding: 0 5px; color: #53675b; font-size: 11px; font-weight: 800; }
+.guidance-toggle { min-height: 44px; display: flex; align-items: center; gap: 9px; color: #344b3f; font-size: 12px; font-weight: 700; }
+.guidance-toggle input { width: 18px; height: 18px; accent-color: #456b56; }
+.guidance-mode-control { min-height: 44px; display: grid; grid-template-columns: auto minmax(0, 1fr); align-items: center; gap: 10px; color: #68766f; font-size: 12px; font-weight: 700; }
+.guidance-mode-control select { min-width: 0; padding: 7px 9px; border: 1px solid #cbd2c8; border-radius: 8px; color: #294838; background: #fff; }
+.guidance-settings small { color: #718079; font-size: 10px; line-height: 1.45; }
+.analysis-required-message { margin: 10px 0 0; padding: 8px 10px; border-radius: 8px; color: #705521; background: #f5ead0; font-size: 11px; font-weight: 700; }
 .evaluation-card { display: grid; grid-template-columns: 1fr auto; gap: 3px 12px; margin-top: 13px; padding: 12px; border: 1px solid #d7ded5; border-radius: 10px; background: #fff; }
 .evaluation-card > span { color: #89918b; font-size: 10px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; }
 .evaluation-card > strong { grid-column: 2; grid-row: 1 / 3; color: #294838; font-family: Georgia, serif; font-size: 25px; }
@@ -431,7 +442,7 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
   .review-workspace { width: 100%; max-width: none; height: calc(100dvh - 56px); padding: 10px 16px 12px; grid-template-columns: minmax(546px, min(720px, calc(100dvh - 170px))) minmax(0, 1fr); gap: 14px; align-items: stretch; }
   .board-column { min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 44px 80px; gap: 8px; }
   .board-stage { min-height: 0; height: 100%; justify-content: start; }
-  .board-frame { width: min(100%, 720px, calc(100dvh - 220px)); align-self: center; padding: 8px; }
+  .board-frame { --board-padding: 8px; width: min(100%, 720px, calc(100dvh - 220px)); align-self: center; }
   .position-controls { margin-top: 0; }
   .evaluation-chart-card.compact { margin-top: 0; }
   .review-sidebar { min-height: 0; height: 100%; grid-template-rows: minmax(0, .9fr) minmax(0, 1.1fr); gap: 10px; }

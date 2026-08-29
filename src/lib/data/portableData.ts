@@ -19,6 +19,8 @@ export const MAX_PORTABLE_FILE_BYTES = 50 * 1024 * 1024;
 export const PORTABLE_SETTING_KEYS = [
   "analysisProfile",
   "analysisMultiPv",
+  "guidanceEnabled",
+  "guidanceMode",
   "chessComUsername",
   "trainingPlayerNames",
   "trainingCoachProfile",

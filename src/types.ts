@@ -42,6 +42,7 @@ export interface ImportSummary {
 
 export type AnalysisProfileId = "quick" | "balanced" | "deep";
 export type MultiPv = 1 | 2 | 3;
+export type GuidanceMode = "next" | "compare";
 
 export interface AnalysisProfile {
   id: AnalysisProfileId;
@@ -84,6 +85,8 @@ export interface AnalysisSnapshot {
   loading: boolean;
   profile: AnalysisProfileId;
   multiPv: MultiPv;
+  guidanceEnabled: boolean;
+  guidanceMode: GuidanceMode;
 }
 
 export type MoveClassificationId =
