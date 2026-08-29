@@ -551,15 +551,26 @@ export class SqliteGameRepository implements GameRepository {
         FOREIGN KEY (game_fingerprint) REFERENCES games(fingerprint) ON DELETE CASCADE
       )
     `);
-    await this.database.execute(`
-      INSERT OR IGNORE INTO position_evaluations_v2 (
-        game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index,
-        score_cp, mate, depth, best_move, pv_json, variations_json, analyzed_at
-      )
-      SELECT game_fingerprint, engine_name, engine_version, profile, 1, position_index,
-        score_cp, mate, depth, best_move, pv_json, '[]', analyzed_at
-      FROM position_evaluations
-    `);
+    const analysisStorageVersion = await this.database.select<SettingRow[]>(
+      "SELECT value FROM app_settings WHERE key = $1",
+      ["analysisStorageVersion"],
+    );
+    // Replaying this copy would resurrect stale legacy rows after a v2 cache is cleared.
+    if (analysisStorageVersion[0]?.value !== "2") {
+      await this.database.execute(`
+        INSERT OR IGNORE INTO position_evaluations_v2 (
+          game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index,
+          score_cp, mate, depth, best_move, pv_json, variations_json, analyzed_at
+        )
+        SELECT game_fingerprint, engine_name, engine_version, profile, 1, position_index,
+          score_cp, mate, depth, best_move, pv_json, '[]', analyzed_at
+        FROM position_evaluations
+      `);
+      await this.database.execute(
+        "INSERT INTO app_settings (key, value) VALUES ($1, $2) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        ["analysisStorageVersion", "2"],
+      );
+    }
     await this.database.execute(`
       CREATE TABLE IF NOT EXISTS chess_com_sync_months (
         username TEXT NOT NULL,

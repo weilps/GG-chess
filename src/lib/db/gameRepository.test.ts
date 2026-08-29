@@ -1,9 +1,13 @@
-import { describe, expect, it, vi } from "vitest";
+import Database from "@tauri-apps/plugin-sql";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineInfo, ParsedGame, PositionEvaluation, StoredGame } from "../../types";
 import {
   MemoryGameRepository,
+  SqliteGameRepository,
   sortGamesNewestFirst,
 } from "./gameRepository";
+
+afterEach(() => vi.restoreAllMocks());
 
 function game(fingerprint: string, playedAt: string | null): ParsedGame {
   return {
@@ -184,5 +188,32 @@ describe("sortGamesNewestFirst", () => {
       "older",
       "unknown",
     ]);
+  });
+});
+
+describe("SqliteGameRepository migrations", () => {
+  it("copies legacy analysis rows only once so cleared v2 rows cannot return", async () => {
+    const settings = new Map<string, string>();
+    const execute = vi.fn(async (statement: string, values?: unknown[]) => {
+      if (statement.startsWith("INSERT INTO app_settings") && values?.[0] === "analysisStorageVersion") {
+        settings.set("analysisStorageVersion", String(values[1]));
+      }
+      return { rowsAffected: 0, lastInsertId: 0 };
+    });
+    const select = vi.fn(async (statement: string) => (
+      statement.includes("WHERE key = $1") && settings.has("analysisStorageVersion")
+        ? [{ value: settings.get("analysisStorageVersion") }]
+        : []
+    ));
+    vi.spyOn(Database, "load").mockResolvedValue({ execute, select } as unknown as Database);
+
+    await new SqliteGameRepository().initialize();
+    await new SqliteGameRepository().initialize();
+
+    const legacyCopies = execute.mock.calls.filter(([statement]) => (
+      String(statement).includes("FROM position_evaluations")
+    ));
+    expect(legacyCopies).toHaveLength(1);
+    expect(settings.get("analysisStorageVersion")).toBe("2");
   });
 });
