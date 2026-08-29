@@ -71,22 +71,24 @@ export default function App() {
 
   return (
     <div className="app-frame">
-      <nav className="topbar">
-        <button className="brand" onClick={() => { setSelectedGame(null); setShowTraining(false); }} aria-label={t("library")}>
-          <span className="brand-mark" aria-hidden="true">♞</span>
-          <span><strong>{t("appName")}</strong><small>{t("tagline")}</small></span>
-        </button>
-        <div className="topbar-actions">
-          <div className="language-switcher" aria-label={t("language")}>
-            <button className={language === "en" ? "active" : ""} onClick={() => setLanguage("en")}>EN</button>
-            <button className={language === "fr" ? "active" : ""} onClick={() => setLanguage("fr")}>FR</button>
-          </div>
-          <button className="text-button" onClick={() => { setSelectedGame(null); setShowTraining(true); }}>
-            {t("trainingLab")}
+      {!selectedGame && (
+        <nav className="topbar">
+          <button className="brand" onClick={() => { setSelectedGame(null); setShowTraining(false); }} aria-label={t("library")}>
+            <span className="brand-mark" aria-hidden="true">♞</span>
+            <span><strong>{t("appName")}</strong><small>{t("tagline")}</small></span>
           </button>
-          <button className="text-button" onClick={() => setShowAbout(true)}>{t("about")}</button>
-        </div>
-      </nav>
+          <div className="topbar-actions">
+            <div className="language-switcher" aria-label={t("language")}>
+              <button className={language === "en" ? "active" : ""} onClick={() => setLanguage("en")}>EN</button>
+              <button className={language === "fr" ? "active" : ""} onClick={() => setLanguage("fr")}>FR</button>
+            </div>
+            <button className="text-button" onClick={() => { setSelectedGame(null); setShowTraining(true); }}>
+              {t("trainingLab")}
+            </button>
+            <button className="text-button" onClick={() => setShowAbout(true)}>{t("about")}</button>
+          </div>
+        </nav>
+      )}
 
       {isLoading ? (
         <main className="loading-screen"><div className="loading-piece">♞</div><span>{t("appName")}</span></main>
@@ -98,7 +100,16 @@ export default function App() {
           t={t}
         />
       ) : selectedGame ? (
-        <ReviewScreen game={selectedGame} repository={repository} language={language} onBack={() => setSelectedGame(null)} t={t} />
+        <ReviewScreen
+          game={selectedGame}
+          repository={repository}
+          language={language}
+          onLanguageChange={setLanguage}
+          onBack={() => setSelectedGame(null)}
+          onOpenTraining={() => { setSelectedGame(null); setShowTraining(true); }}
+          onOpenAbout={() => setShowAbout(true)}
+          t={t}
+        />
       ) : (
         <LibraryScreen
           games={games}

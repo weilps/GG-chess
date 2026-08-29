@@ -207,4 +207,25 @@ describe("EnginePanel", () => {
     })));
     expect(onAnalysisStateChange).not.toHaveBeenCalledWith(expect.objectContaining({ loading: false }));
   });
+
+  it("opens compact settings and returns focus when dismissed", async () => {
+    render(<EnginePanel compact game={game} positionIndex={0} repository={new MemoryGameRepository()} t={t} />);
+
+    const settingsButton = screen.getByRole("button", { name: "Settings" });
+    fireEvent.click(settingsButton);
+    expect(await screen.findByRole("dialog", { name: "Local analysis" })).toBeInTheDocument();
+    expect(await screen.findByText(/Stockfish 18/)).toBeInTheDocument();
+    const closeButton = screen.getByRole("button", { name: "Close" });
+    await waitFor(() => expect(closeButton).toHaveFocus());
+
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Local analysis" })).not.toBeInTheDocument();
+    expect(settingsButton).toHaveFocus();
+
+    fireEvent.click(settingsButton);
+    expect(screen.getByRole("dialog", { name: "Local analysis" })).toBeInTheDocument();
+    fireEvent.pointerDown(document.body);
+    expect(screen.queryByRole("dialog", { name: "Local analysis" })).not.toBeInTheDocument();
+    expect(settingsButton).toHaveFocus();
+  });
 });

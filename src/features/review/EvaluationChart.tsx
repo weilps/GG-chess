@@ -42,6 +42,7 @@ function pointLabel(
 }
 
 export function EvaluationChart({
+  compact = false,
   evaluations,
   ratings,
   moves,
@@ -50,6 +51,7 @@ export function EvaluationChart({
   onSelectPosition,
   t,
 }: {
+  compact?: boolean;
   evaluations: PositionEvaluation[];
   ratings: MoveClassification[];
   moves: string[];
@@ -70,7 +72,7 @@ export function EvaluationChart({
   };
 
   return (
-    <section className="evaluation-chart-card" aria-label={t("evaluationGraph")}>
+    <section className={`evaluation-chart-card${compact ? " compact" : ""}`} aria-label={t("evaluationGraph")}>
       <div className="game-review-heading">
         <div>
           <span className="eyebrow">{t("gameReview")}</span>

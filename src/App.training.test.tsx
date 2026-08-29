@@ -26,7 +26,8 @@ describe("App Training Lab navigation", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Open game: Ada – Grace" }));
     expect(await screen.findByText("Game Review")).toBeInTheDocument();
-    await userEvent.click(screen.getByRole("button", { name: "Training Lab" }));
+    await userEvent.click(screen.getByLabelText("More"));
+    await userEvent.click(screen.getByRole("menuitem", { name: "Training Lab" }));
 
     const reviewQuest = (await screen.findByText("Review 3 different games")).closest("article")!;
     expect(within(reviewQuest).getByText("1/3")).toBeInTheDocument();
