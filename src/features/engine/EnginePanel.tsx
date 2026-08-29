@@ -305,9 +305,14 @@ export function EnginePanel({
     await cancelAnalysis(analysisIdRef.current);
   }, []);
 
-  const closeSettings = useCallback(() => {
+  const closeSettings = useCallback((deferFocus = false) => {
     setSettingsOpen(false);
-    settingsButtonRef.current?.focus();
+    const restoreFocus = () => settingsButtonRef.current?.focus();
+    if (deferFocus) {
+      window.requestAnimationFrame(restoreFocus);
+    } else {
+      restoreFocus();
+    }
   }, []);
 
   useEffect(() => {
@@ -320,7 +325,7 @@ export function EnginePanel({
       }
     };
     const handlePointerDown = (event: PointerEvent) => {
-      if (!settingsWrapRef.current?.contains(event.target as Node)) closeSettings();
+      if (!settingsWrapRef.current?.contains(event.target as Node)) closeSettings(true);
     };
     window.addEventListener("keydown", handleKeyDown);
     document.addEventListener("pointerdown", handlePointerDown);
@@ -444,7 +449,7 @@ export function EnginePanel({
               <button
                 ref={settingsCloseRef}
                 className="engine-settings-close"
-                onClick={closeSettings}
+                onClick={() => closeSettings()}
                 aria-label={t("close")}
                 title={t("close")}
               >

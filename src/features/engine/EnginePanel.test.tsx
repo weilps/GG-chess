@@ -209,7 +209,12 @@ describe("EnginePanel", () => {
   });
 
   it("opens compact settings and returns focus when dismissed", async () => {
-    render(<EnginePanel compact game={game} positionIndex={0} repository={new MemoryGameRepository()} t={t} />);
+    render(
+      <>
+        <button>Outside control</button>
+        <EnginePanel compact game={game} positionIndex={0} repository={new MemoryGameRepository()} t={t} />
+      </>,
+    );
 
     const settingsButton = screen.getByRole("button", { name: "Settings" });
     fireEvent.click(settingsButton);
@@ -224,9 +229,12 @@ describe("EnginePanel", () => {
 
     fireEvent.click(settingsButton);
     expect(screen.getByRole("dialog", { name: "Local analysis" })).toBeInTheDocument();
-    fireEvent.pointerDown(document.body);
+    const outsideButton = screen.getByRole("button", { name: "Outside control" });
+    fireEvent.pointerDown(outsideButton);
+    outsideButton.focus();
+    fireEvent.click(outsideButton);
     expect(screen.queryByRole("dialog", { name: "Local analysis" })).not.toBeInTheDocument();
-    expect(settingsButton).toHaveFocus();
+    await waitFor(() => expect(settingsButton).toHaveFocus());
   });
 
   it("automatically exposes compact analysis failures and keeps their status on Settings", async () => {
