@@ -255,8 +255,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .chart-grid-line { stroke: #e4e7e0; stroke-width: 1; }
 .chart-zero-line { stroke: #aeb7ae; stroke-width: 1.4; stroke-dasharray: 5 4; }
 .evaluation-line { fill: none; stroke: #6d8074; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.evaluation-point { fill: #7c8880; stroke: #fff; stroke-width: 2; cursor: pointer; transition: r .12s ease; }
-.evaluation-point:hover, .evaluation-point:focus { stroke: #d6a64a; stroke-width: 3; outline: none; }
+.evaluation-point-target { cursor: pointer; outline: none; }
+.evaluation-point { fill: #7c8880; stroke: #fff; stroke-width: 2; transition: r .12s ease; }
+.evaluation-point-target:hover .evaluation-point, .evaluation-point-target:focus-visible .evaluation-point { stroke: #d6a64a; stroke-width: 3; }
 .evaluation-point.selected-chart-point { stroke: #294838; stroke-width: 3; }
 .evaluation-chart .rating-brilliant { fill: #6ed7c3; }
 .evaluation-chart .rating-great { fill: #4b9e79; }
@@ -363,6 +364,8 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .engine-header-action .primary-button, .engine-header-action .danger-button { min-height: 44px; padding: 8px 13px; white-space: nowrap; }
 .engine-header-progress { color: #69766f; font-size: 10px; font-weight: 750; white-space: nowrap; }
 .engine-settings-wrap { position: relative; height: 44px; }
+.engine-settings-wrap > .engine-settings-error { position: relative; border-color: #a94d42; color: #87372f; }
+.engine-settings-error-dot { position: absolute; top: 6px; right: 6px; width: 8px; height: 8px; border: 2px solid #fff; border-radius: 50%; background: #b5483e; }
 .engine-settings-popover { position: absolute; z-index: 40; top: calc(100% + 7px); right: 0; width: min(380px, calc(100vw - 32px)); max-height: calc(100dvh - 76px); overflow-y: auto; padding: 17px; border: 1px solid #d2d8d0; border-radius: 13px; background: #f8f9f4; box-shadow: 0 18px 48px rgba(28, 45, 35, .24); }
 .engine-settings-close { position: absolute; z-index: 1; top: 8px; right: 8px; width: 44px; height: 44px; border: 0; border-radius: 8px; color: #52645a; background: transparent; font-size: 23px; }
 .engine-settings-close:hover { background: #e9ede6; }

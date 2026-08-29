@@ -228,4 +228,17 @@ describe("EnginePanel", () => {
     expect(screen.queryByRole("dialog", { name: "Local analysis" })).not.toBeInTheDocument();
     expect(settingsButton).toHaveFocus();
   });
+
+  it("automatically exposes compact analysis failures and keeps their status on Settings", async () => {
+    mocks.analyzePositions.mockRejectedValueOnce(new Error("engine_timeout"));
+    render(<EnginePanel compact game={game} positionIndex={0} repository={new MemoryGameRepository()} t={t} />);
+
+    const analyzeButton = screen.getByRole("button", { name: "Analyze" });
+    await waitFor(() => expect(analyzeButton).toBeEnabled());
+    fireEvent.click(analyzeButton);
+
+    expect(await screen.findByRole("dialog", { name: "Local analysis" })).toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent(t("engineErrorTimeout"));
+    expect(screen.getByRole("button", { name: `Settings: ${t("engineErrorTimeout")}` })).toBeInTheDocument();
+  });
 });

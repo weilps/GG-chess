@@ -64,7 +64,7 @@ export function EvaluationChart({
   const segments = buildEvaluationSegments(evaluations, positionCount, gameResult);
   const ratingByPosition = new Map(ratings.map((rating) => [rating.positionIndex, rating]));
   const points = segments.flat();
-  const activate = (event: KeyboardEvent<SVGCircleElement>, positionIndex: number) => {
+  const activate = (event: KeyboardEvent<SVGGElement>, positionIndex: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
       onSelectPosition(positionIndex);
@@ -116,19 +116,36 @@ export function EvaluationChart({
             const rating = ratingByPosition.get(point.positionIndex);
             const selected = point.positionIndex === selectedPositionIndex;
             return (
-              <circle
+              <g
                 key={point.positionIndex}
-                className={`evaluation-point ${rating ? `rating-${rating.classification}` : "chart-neutral"}${selected ? " selected-chart-point" : ""}`}
-                cx={pointX(point.positionIndex, positionCount)}
-                cy={pointY(point.value)}
-                r={selected ? 6 : 4}
+                className="evaluation-point-target"
                 role="button"
                 tabIndex={0}
                 aria-current={selected ? "true" : undefined}
                 aria-label={pointLabel(point.positionIndex, point.evaluation, moves, gameResult, t)}
                 onClick={() => onSelectPosition(point.positionIndex)}
                 onKeyDown={(event) => activate(event, point.positionIndex)}
-              />
+              >
+                <circle
+                  className="evaluation-point-hit"
+                  cx={pointX(point.positionIndex, positionCount)}
+                  cy={pointY(point.value)}
+                  r={1}
+                  fill="transparent"
+                  stroke="transparent"
+                  strokeWidth={44}
+                  vectorEffect="non-scaling-stroke"
+                  pointerEvents="all"
+                />
+                <circle
+                  aria-hidden="true"
+                  className={`evaluation-point ${rating ? `rating-${rating.classification}` : "chart-neutral"}${selected ? " selected-chart-point" : ""}`}
+                  cx={pointX(point.positionIndex, positionCount)}
+                  cy={pointY(point.value)}
+                  r={selected ? 6 : 4}
+                  pointerEvents="none"
+                />
+              </g>
             );
           })}
         </svg>

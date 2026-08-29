@@ -42,6 +42,8 @@ describe("EvaluationChart", () => {
     expect(onSelectPosition).toHaveBeenNthCalledWith(1, 1);
     expect(onSelectPosition).toHaveBeenNthCalledWith(2, 1);
     expect(screen.getByRole("button", { name: /Starting position/ })).toHaveAttribute("aria-current", "true");
+    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("stroke-width", "44");
+    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("vector-effect", "non-scaling-stroke");
     expect(screen.getByText("Best")).toBeInTheDocument();
   });
 

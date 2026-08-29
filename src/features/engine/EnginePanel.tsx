@@ -104,6 +104,10 @@ export function EnginePanel({
   const settingsButtonRef = useRef<HTMLButtonElement | null>(null);
   const settingsCloseRef = useRef<HTMLButtonElement | null>(null);
   const settingsWrapRef = useRef<HTMLDivElement | null>(null);
+  const exposeError = useCallback((key: TranslationKey) => {
+    setErrorKey(key);
+    if (compact) setSettingsOpen(true);
+  }, [compact]);
 
   const profile = ANALYSIS_PROFILES.find((item) => item.id === profileId) ?? ANALYSIS_PROFILES[1];
   const activeCacheKey = engine
@@ -187,11 +191,11 @@ export function EnginePanel({
       .catch(() => {
         if (active) {
           setEvaluationCache({ key: activeCacheKey, values: [], loading: false });
-          setErrorKey("engineErrorCache");
+          exposeError("engineErrorCache");
         }
       });
     return () => { active = false; };
-  }, [activeCacheKey, engine, game.fingerprint, profileId, repository]);
+  }, [activeCacheKey, engine, exposeError, game.fingerprint, profileId, repository]);
 
   const chooseEngine = useCallback(async () => {
     setErrorKey(null);
@@ -210,9 +214,9 @@ export function EnginePanel({
       setEngineStatus("ready");
     } catch (error) {
       setEngineStatus("error");
-      setErrorKey(localizedEngineError(engineErrorCode(error)));
+      exposeError(localizedEngineError(engineErrorCode(error)));
     }
-  }, [onAnalysisStateChange, profileId, repository]);
+  }, [exposeError, onAnalysisStateChange, profileId, repository]);
 
   const changeProfile = useCallback(async (next: AnalysisProfileId) => {
     onAnalysisStateChange?.({
@@ -280,9 +284,9 @@ export function EnginePanel({
       await repository.saveEvaluations(game.fingerprint, engine, profileId, response.evaluations);
       const stored = await repository.getAnalysis(game.fingerprint, engine, profileId);
       setEvaluationCache({ key: activeCacheKey, values: stored, loading: false });
-      if (response.cancelled) setErrorKey("engineAnalysisCancelled");
+      if (response.cancelled) exposeError("engineAnalysisCancelled");
     } catch (error) {
-      setErrorKey(localizedEngineError(engineErrorCode(error)));
+      exposeError(localizedEngineError(engineErrorCode(error)));
     } finally {
       unsubscribe();
       analysisIdRef.current = null;
@@ -293,7 +297,7 @@ export function EnginePanel({
       setIsCancelling(false);
       setProgress(null);
     }
-  }, [activeCacheKey, engine, evaluations, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, onAnalysisStateChange, profile.depth, profileId, repository]);
+  }, [activeCacheKey, engine, evaluations, exposeError, game.fingerprint, game.positions, game.result, isAnalyzing, isCacheLoading, onAnalysisStateChange, profile.depth, profileId, repository]);
 
   const stopAnalysis = useCallback(async () => {
     if (!analysisIdRef.current) return;
@@ -425,14 +429,15 @@ export function EnginePanel({
         <div className="engine-settings-wrap" ref={settingsWrapRef}>
           <button
             ref={settingsButtonRef}
-            className="review-icon-button"
+            className={`review-icon-button${errorKey ? " engine-settings-error" : ""}`}
             aria-expanded={settingsOpen}
             aria-haspopup="dialog"
-            aria-label={t("settings")}
-            title={t("settings")}
+            aria-label={errorKey ? `${t("settings")}: ${t(errorKey)}` : t("settings")}
+            title={errorKey ? t(errorKey) : t("settings")}
             onClick={() => setSettingsOpen((open) => !open)}
           >
             <GearIcon />
+            {errorKey ? <span className="engine-settings-error-dot" aria-hidden="true" /> : null}
           </button>
           {settingsOpen ? (
             <section className="engine-settings-popover" role="dialog" aria-label={t("localAnalysis")}>
