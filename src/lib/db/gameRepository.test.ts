@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { EngineInfo, ParsedGame, StoredGame } from "../../types";
+import type { EngineInfo, ParsedGame, PositionEvaluation, StoredGame } from "../../types";
 import {
   MemoryGameRepository,
   sortGamesNewestFirst,
@@ -19,6 +19,16 @@ function game(fingerprint: string, playedAt: string | null): ParsedGame {
     moves: ["e4"],
     positions: ["start", "after"],
   };
+}
+
+function evaluation(
+  positionIndex: number,
+  scoreCp: number,
+  bestMove: string | null,
+  pv: string[],
+): PositionEvaluation {
+  const rankOne = { rank: 1 as const, scoreCp, mate: null, depth: 18, bestMove, pv };
+  return { positionIndex, ...rankOne, variations: [rankOne] };
 }
 
 describe("MemoryGameRepository", () => {
@@ -44,23 +54,18 @@ describe("MemoryGameRepository", () => {
     const repository = new MemoryGameRepository();
     const engine: EngineInfo = { path: "stockfish.exe", name: "Stockfish 18", version: "18" };
     await repository.setSetting("analysisProfile", "deep");
-    await repository.saveEvaluations("one", engine, "balanced", [{
-      positionIndex: 0,
-      scoreCp: 35,
-      mate: null,
-      depth: 18,
-      bestMove: "e2e4",
-      pv: ["e2e4", "e7e5"],
-    }]);
+    await repository.saveEvaluations("one", engine, "balanced", 1, [
+      evaluation(0, 35, "e2e4", ["e2e4", "e7e5"]),
+    ]);
 
     expect(await repository.getSetting("analysisProfile")).toBe("deep");
-    expect(await repository.getAnalysis("one", engine, "balanced")).toMatchObject([
+    expect(await repository.getAnalysis("one", engine, "balanced", 1)).toMatchObject([
       { positionIndex: 0, scoreCp: 35, profile: "balanced" },
     ]);
-    expect(await repository.getAnalysis("one", engine, "deep")).toEqual([]);
+    expect(await repository.getAnalysis("one", engine, "deep", 1)).toEqual([]);
 
-    await repository.clearAnalysis("one", engine, "balanced");
-    expect(await repository.getAnalysis("one", engine, "balanced")).toEqual([]);
+    await repository.clearAnalysis("one", engine, "balanced", 1);
+    expect(await repository.getAnalysis("one", engine, "balanced", 1)).toEqual([]);
   });
 
   it("persists monthly Chess.com sync markers per normalized username", async () => {
@@ -103,9 +108,9 @@ describe("MemoryGameRepository", () => {
   it("groups analysis caches and persists training progress idempotently", async () => {
     const repository = new MemoryGameRepository();
     const engine: EngineInfo = { path: "stockfish.exe", name: "Stockfish", version: "18" };
-    await repository.saveEvaluations("one", engine, "balanced", [
-      { positionIndex: 0, scoreCp: 30, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4"] },
-      { positionIndex: 1, scoreCp: 20, mate: null, depth: 18, bestMove: "e7e5", pv: ["e7e5"] },
+    await repository.saveEvaluations("one", engine, "balanced", 1, [
+      evaluation(0, 30, "e2e4", ["e2e4"]),
+      evaluation(1, 20, "e7e5", ["e7e5"]),
     ]);
     expect(await repository.listAnalysisCaches()).toMatchObject([{
       gameFingerprint: "one",
@@ -136,6 +141,33 @@ describe("MemoryGameRepository", () => {
     await repository.recordTrainingActivity({ ...activity, createdAt: "later" });
     expect(await repository.listTrainingActivities("2026-08-24")).toEqual([activity]);
     expect(await repository.listTrainingDays()).toEqual(["2026-08-25"]);
+  });
+
+  it("keeps one-line and three-line caches independently", async () => {
+    const repository = new MemoryGameRepository();
+    const engine: EngineInfo = { path: "stockfish.exe", name: "Stockfish", version: "18" };
+    const rankOne = evaluation(0, 30, "e2e4", ["e2e4"]);
+    const threeLines: PositionEvaluation = {
+      ...rankOne,
+      variations: [
+        rankOne.variations[0],
+        { rank: 2, scoreCp: 20, mate: null, depth: 18, bestMove: "d2d4", pv: ["d2d4"] },
+        { rank: 3, scoreCp: 10, mate: null, depth: 18, bestMove: "g1f3", pv: ["g1f3"] },
+      ],
+    };
+
+    await repository.saveEvaluations("one", engine, "balanced", 1, [rankOne]);
+    await repository.saveEvaluations("one", engine, "balanced", 3, [threeLines]);
+    expect(await repository.getAnalysis("one", engine, "balanced", 1)).toMatchObject([
+      { multiPv: 1, variations: [{ rank: 1 }] },
+    ]);
+    expect(await repository.getAnalysis("one", engine, "balanced", 3)).toMatchObject([
+      { multiPv: 3, variations: [{ rank: 1 }, { rank: 2 }, { rank: 3 }] },
+    ]);
+
+    await repository.clearAnalysis("one", engine, "balanced", 3);
+    expect(await repository.getAnalysis("one", engine, "balanced", 3)).toEqual([]);
+    expect(await repository.getAnalysis("one", engine, "balanced", 1)).toHaveLength(1);
   });
 });
 

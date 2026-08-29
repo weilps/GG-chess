@@ -38,13 +38,15 @@ async function populatedRepository(): Promise<MemoryGameRepository> {
   const record = sampleGame();
   const engine: EngineInfo = { path: "C:\\machine-only\\stockfish.exe", name: "Stockfish", version: "18" };
   await repository.addGames([record]);
-  await repository.saveEvaluations(record.fingerprint, engine, "balanced", [{
+  const variations = [
+    { rank: 1 as const, scoreCp: 20, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4", "e7e5"] },
+    { rank: 2 as const, scoreCp: 10, mate: null, depth: 18, bestMove: "d2d4", pv: ["d2d4", "d7d5"] },
+    { rank: 3 as const, scoreCp: 0, mate: null, depth: 18, bestMove: "g1f3", pv: ["g1f3", "g8f6"] },
+  ];
+  await repository.saveEvaluations(record.fingerprint, engine, "balanced", 3, [{
     positionIndex: 0,
-    scoreCp: 20,
-    mate: null,
-    depth: 18,
-    bestMove: "e2e4",
-    pv: ["e2e4", "e7e5"],
+    ...variations[0],
+    variations,
   }]);
   await repository.saveChessComSyncState({
     username: "ada",
@@ -70,6 +72,7 @@ async function populatedRepository(): Promise<MemoryGameRepository> {
     createdAt: "2026-08-25T00:00:00Z",
   });
   await repository.setSetting("analysisProfile", "balanced");
+  await repository.setSetting("analysisMultiPv", "3");
   await repository.setSetting("trainingCoachProfile", "playful");
   await repository.setSetting("enginePath", engine.path);
   await repository.setSetting("codexConsent", "true");
@@ -87,6 +90,7 @@ describe("portable ChessMate data", () => {
     );
     expect(backup.settings).toEqual({
       analysisProfile: "balanced",
+      analysisMultiPv: "3",
       trainingCoachProfile: "playful",
     });
     expect(JSON.stringify(backup)).not.toContain("machine-only");
@@ -107,6 +111,27 @@ describe("portable ChessMate data", () => {
     const second = await target.restorePortableData(parsed);
     expect(second).toMatchObject({ added: 0, updated: 0, rejected: 0 });
     expect(second.unchanged).toBeGreaterThan(0);
+  });
+
+  it("migrates schema-one analysis caches to compatible one-line data", async () => {
+    const current = await buildPortableBackup(await populatedRepository(), "en", "0.1.0");
+    const legacy = JSON.parse(serializePortableBackup(current)) as Record<string, unknown>;
+    legacy.schemaVersion = 1;
+    const caches = legacy.analysisCaches as Array<Record<string, unknown>>;
+    for (const cache of caches) {
+      delete cache.multiPv;
+      for (const evaluation of cache.evaluations as Array<Record<string, unknown>>) {
+        delete evaluation.multiPv;
+        delete evaluation.variations;
+      }
+    }
+
+    const parsed = parsePortableBackup(JSON.stringify(legacy));
+    expect(parsed.schemaVersion).toBe(2);
+    expect(parsed.analysisCaches[0]).toMatchObject({
+      multiPv: 1,
+      evaluations: [{ multiPv: 1, variations: [{ rank: 1 }] }],
+    });
   });
 
   it("rejects invalid JSON, incompatible schemas and incoherent data before restore", async () => {

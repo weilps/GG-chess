@@ -1,46 +1,25 @@
 import { describe, expect, it } from "vitest";
+import type { PositionEvaluation } from "../../types";
 import { formatEvaluation } from "./engineClient";
+
+function evaluation(scoreCp: number | null, mate: number | null, bestMove: string | null): PositionEvaluation {
+  const pv: string[] = [];
+  const rankOne = { rank: 1 as const, scoreCp, mate, depth: 18, bestMove, pv };
+  return { positionIndex: 0, scoreCp, mate, depth: 18, bestMove, pv, variations: [rankOne] };
+}
 
 describe("formatEvaluation", () => {
   it("formats centipawns from White's perspective", () => {
-    expect(formatEvaluation({
-      positionIndex: 0,
-      scoreCp: 35,
-      mate: null,
-      depth: 18,
-      bestMove: "e2e4",
-      pv: [],
-    })).toBe("+0.35");
-    expect(formatEvaluation({
-      positionIndex: 1,
-      scoreCp: -120,
-      mate: null,
-      depth: 18,
-      bestMove: "e7e5",
-      pv: [],
-    })).toBe("-1.20");
+    expect(formatEvaluation(evaluation(35, null, "e2e4"))).toBe("+0.35");
+    expect(formatEvaluation(evaluation(-120, null, "e7e5"))).toBe("-1.20");
   });
 
   it("formats positive and negative mate scores", () => {
-    const evaluation = {
-      positionIndex: 0,
-      scoreCp: null,
-      depth: 22,
-      bestMove: "h7h8q",
-      pv: [],
-    };
-    expect(formatEvaluation({ ...evaluation, mate: 3 })).toBe("M3");
-    expect(formatEvaluation({ ...evaluation, mate: -3 })).toBe("-M3");
+    expect(formatEvaluation(evaluation(null, 3, "h7h8q"))).toBe("M3");
+    expect(formatEvaluation(evaluation(null, -3, "h7h8q"))).toBe("-M3");
   });
 
   it("formats a terminal mate score without requiring a best move", () => {
-    expect(formatEvaluation({
-      positionIndex: 42,
-      scoreCp: null,
-      mate: 0,
-      depth: 0,
-      bestMove: null,
-      pv: [],
-    })).toBe("M0");
+    expect(formatEvaluation(evaluation(null, 0, null))).toBe("M0");
   });
 });

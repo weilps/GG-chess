@@ -27,7 +27,8 @@ function evaluation(
   bestMove: string | null,
   mate: number | null = null,
 ): PositionEvaluation {
-  return { positionIndex, scoreCp, mate, depth: 18, bestMove, pv: [] };
+  const rankOne = { rank: 1 as const, scoreCp, mate, depth: 18, bestMove, pv: [] };
+  return { positionIndex, scoreCp, mate, depth: 18, bestMove, pv: [], variations: [rankOne] };
 }
 
 function positionsFor(moves: string[]): string[] {

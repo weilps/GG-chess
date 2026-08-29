@@ -81,6 +81,7 @@ export function ReviewScreen({
     engineStatus: "loading",
     loading: true,
     profile: "balanced",
+    multiPv: 1,
   });
   const lastPositionIndex = game.positions.length - 1;
   const isCompletedGame = ["1-0", "0-1", "1/2-1/2"].includes(game.result);

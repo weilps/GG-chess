@@ -11,6 +11,7 @@ const evaluation: PositionEvaluation = {
   depth: 18,
   bestMove: "g1f3",
   pv: [],
+  variations: [{ rank: 1, scoreCp: 400, mate: null, depth: 18, bestMove: "g1f3", pv: [] }],
 };
 
 describe("EvaluationBar", () => {

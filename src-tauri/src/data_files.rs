@@ -10,10 +10,11 @@ use std::{
 };
 use tauri::Manager;
 
-const BACKUP_SCHEMA_VERSION: u32 = 1;
+const BACKUP_SCHEMA_VERSION: u32 = 2;
 const MAX_PORTABLE_BYTES: usize = 50 * 1024 * 1024;
-const PORTABLE_SETTINGS: [&str; 4] = [
+const PORTABLE_SETTINGS: [&str; 5] = [
     "analysisProfile",
+    "analysisMultiPv",
     "chessComUsername",
     "trainingPlayerNames",
     "trainingCoachProfile",
@@ -59,6 +60,7 @@ struct BackupCache {
     engine_name: String,
     engine_version: String,
     profile: String,
+    multi_pv: u8,
     analyzed_at: String,
     evaluations: Vec<BackupEvaluation>,
 }
@@ -70,13 +72,26 @@ struct BackupEvaluation {
     engine_name: String,
     engine_version: String,
     profile: String,
+    multi_pv: u8,
     position_index: i64,
     score_cp: Option<i64>,
     mate: Option<i64>,
     depth: i64,
     best_move: Option<String>,
     pv: Vec<String>,
+    variations: Vec<BackupVariation>,
     analyzed_at: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct BackupVariation {
+    rank: u8,
+    score_cp: Option<i64>,
+    mate: Option<i64>,
+    depth: i64,
+    best_move: Option<String>,
+    pv: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -239,6 +254,7 @@ fn validate_backup(backup: &PortableBackup) -> Result<(), String> {
             return Err("Analysis cache does not match a backed-up game".into());
         };
         if !matches!(cache.profile.as_str(), "quick" | "balanced" | "deep")
+            || !(1..=3).contains(&cache.multi_pv)
             || cache.analyzed_at.is_empty()
         {
             return Err("Analysis cache does not match a backed-up game".into());
@@ -248,9 +264,26 @@ fn validate_backup(backup: &PortableBackup) -> Result<(), String> {
                 || evaluation.engine_name != cache.engine_name
                 || evaluation.engine_version != cache.engine_version
                 || evaluation.profile != cache.profile
+                || evaluation.multi_pv != cache.multi_pv
                 || evaluation.position_index < 0
                 || evaluation.position_index as usize >= *position_count
                 || evaluation.depth < 0
+                || evaluation.variations.is_empty()
+                || evaluation.variations.len() > cache.multi_pv as usize
+                || evaluation
+                    .variations
+                    .iter()
+                    .enumerate()
+                    .any(|(index, variation)| {
+                        variation.rank as usize != index + 1 || variation.depth < 0
+                    })
+                || evaluation.variations.first().is_some_and(|rank_one| {
+                    evaluation.score_cp != rank_one.score_cp
+                        || evaluation.mate != rank_one.mate
+                        || evaluation.depth != rank_one.depth
+                        || evaluation.best_move != rank_one.best_move
+                        || evaluation.pv != rank_one.pv
+                })
             {
                 return Err("Invalid analysis evaluation".into());
             }
@@ -332,33 +365,31 @@ fn restore_evaluations(
     backup: &PortableBackup,
     summary: &mut RestoreSummary,
 ) -> rusqlite::Result<()> {
-    for evaluation in backup
-        .analysis_caches
-        .iter()
-        .flat_map(|cache| cache.evaluations.iter())
-    {
-        let existing: Option<String> = transaction
+    for cache in &backup.analysis_caches {
+        for evaluation in &cache.evaluations {
+            let existing: Option<String> = transaction
             .query_row(
-                "SELECT analyzed_at FROM position_evaluations WHERE game_fingerprint=?1 AND engine_name=?2 AND engine_version=?3 AND profile=?4 AND position_index=?5",
-                params![evaluation.game_fingerprint, evaluation.engine_name, evaluation.engine_version, evaluation.profile, evaluation.position_index],
+                "SELECT analyzed_at FROM position_evaluations_v2 WHERE game_fingerprint=?1 AND engine_name=?2 AND engine_version=?3 AND profile=?4 AND multi_pv=?5 AND position_index=?6",
+                params![evaluation.game_fingerprint, evaluation.engine_name, evaluation.engine_version, evaluation.profile, cache.multi_pv, evaluation.position_index],
                 |row| row.get(0),
             )
             .optional()?;
-        if existing
-            .as_ref()
-            .is_some_and(|timestamp| timestamp >= &evaluation.analyzed_at)
-        {
-            summary.unchanged += 1;
-            continue;
-        }
-        transaction.execute(
-            "INSERT INTO position_evaluations (game_fingerprint, engine_name, engine_version, profile, position_index, score_cp, mate, depth, best_move, pv_json, analyzed_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11) ON CONFLICT(game_fingerprint,engine_name,engine_version,profile,position_index) DO UPDATE SET score_cp=excluded.score_cp,mate=excluded.mate,depth=excluded.depth,best_move=excluded.best_move,pv_json=excluded.pv_json,analyzed_at=excluded.analyzed_at",
-            params![evaluation.game_fingerprint, evaluation.engine_name, evaluation.engine_version, evaluation.profile, evaluation.position_index, evaluation.score_cp, evaluation.mate, evaluation.depth, evaluation.best_move.as_deref().unwrap_or(""), serde_json::to_string(&evaluation.pv).unwrap_or_default(), evaluation.analyzed_at],
+            if existing
+                .as_ref()
+                .is_some_and(|timestamp| timestamp >= &evaluation.analyzed_at)
+            {
+                summary.unchanged += 1;
+                continue;
+            }
+            transaction.execute(
+            "INSERT INTO position_evaluations_v2 (game_fingerprint, engine_name, engine_version, profile, multi_pv, position_index, score_cp, mate, depth, best_move, pv_json, variations_json, analyzed_at) VALUES (?1,?2,?3,?4,?5,?6,?7,?8,?9,?10,?11,?12,?13) ON CONFLICT(game_fingerprint,engine_name,engine_version,profile,multi_pv,position_index) DO UPDATE SET score_cp=excluded.score_cp,mate=excluded.mate,depth=excluded.depth,best_move=excluded.best_move,pv_json=excluded.pv_json,variations_json=excluded.variations_json,analyzed_at=excluded.analyzed_at",
+            params![evaluation.game_fingerprint, evaluation.engine_name, evaluation.engine_version, evaluation.profile, cache.multi_pv, evaluation.position_index, evaluation.score_cp, evaluation.mate, evaluation.depth, evaluation.best_move.as_deref().unwrap_or(""), serde_json::to_string(&evaluation.pv).unwrap_or_default(), serde_json::to_string(&evaluation.variations).unwrap_or_default(), evaluation.analyzed_at],
         )?;
-        if existing.is_some() {
-            summary.updated += 1;
-        } else {
-            summary.added += 1;
+            if existing.is_some() {
+                summary.updated += 1;
+            } else {
+                summary.added += 1;
+            }
         }
     }
     Ok(())
@@ -519,18 +550,28 @@ mod tests {
             engine_name: "Stockfish".into(),
             engine_version: "18".into(),
             profile: "balanced".into(),
+            multi_pv: 1,
             analyzed_at: "2026-08-25T00:00:00Z".into(),
             evaluations: vec![BackupEvaluation {
                 game_fingerprint: "game".into(),
                 engine_name: "Stockfish".into(),
                 engine_version: "18".into(),
                 profile: "balanced".into(),
+                multi_pv: 1,
                 position_index: 500,
                 score_cp: Some(10),
                 mate: None,
                 depth: 18,
                 best_move: Some("e2e4".into()),
                 pv: vec!["e2e4".into()],
+                variations: vec![BackupVariation {
+                    rank: 1,
+                    score_cp: Some(10),
+                    mate: None,
+                    depth: 18,
+                    best_move: Some("e2e4".into()),
+                    pv: vec!["e2e4".into()],
+                }],
                 analyzed_at: "2026-08-25T00:00:00Z".into(),
             }],
         });
@@ -559,9 +600,45 @@ mod tests {
         assert_eq!(count, 0);
     }
 
+    #[test]
+    fn restores_separate_multipv_caches_and_every_ranked_variation() {
+        let mut connection = Connection::open_in_memory().unwrap();
+        connection.execute_batch(
+            "CREATE TABLE games (fingerprint TEXT PRIMARY KEY, white_player TEXT, black_player TEXT, result TEXT, played_at TEXT, display_date TEXT, time_control TEXT, source TEXT, raw_pgn TEXT, moves_json TEXT, positions_json TEXT, imported_at TEXT);
+             CREATE TABLE position_evaluations_v2 (game_fingerprint TEXT, engine_name TEXT, engine_version TEXT, profile TEXT, multi_pv INTEGER, position_index INTEGER, score_cp INTEGER, mate INTEGER, depth INTEGER, best_move TEXT, pv_json TEXT, variations_json TEXT, analyzed_at TEXT, PRIMARY KEY(game_fingerprint,engine_name,engine_version,profile,multi_pv,position_index));
+             CREATE TABLE chess_com_sync_months (username TEXT, year_month TEXT, etag TEXT, last_modified TEXT, completed_at TEXT, checked_at TEXT, PRIMARY KEY(username,year_month));
+             CREATE TABLE training_puzzle_progress (puzzle_key TEXT PRIMARY KEY, attempts INTEGER, successes INTEGER, last_result TEXT, due_at TEXT, updated_at TEXT);
+             CREATE TABLE training_activities (week_start TEXT, kind TEXT, item_key TEXT, occurred_on TEXT, created_at TEXT, PRIMARY KEY(week_start,kind,item_key));
+             CREATE TABLE training_days (day TEXT PRIMARY KEY);
+             CREATE TABLE app_settings (key TEXT PRIMARY KEY, value TEXT);",
+        ).unwrap();
+        let mut backup = empty_backup();
+        backup.games.push(sample_game());
+        backup.analysis_caches.push(sample_cache(1));
+        backup.analysis_caches.push(sample_cache(3));
+
+        restore_into_connection(&mut connection, &backup).unwrap();
+        let cache_count: i64 = connection
+            .query_row("SELECT COUNT(*) FROM position_evaluations_v2", [], |row| {
+                row.get(0)
+            })
+            .unwrap();
+        let variations_json: String = connection
+            .query_row(
+                "SELECT variations_json FROM position_evaluations_v2 WHERE multi_pv=3",
+                [],
+                |row| row.get(0),
+            )
+            .unwrap();
+        let variations: Vec<BackupVariation> = serde_json::from_str(&variations_json).unwrap();
+        assert_eq!(cache_count, 2);
+        assert_eq!(variations.len(), 3);
+        assert_eq!(variations[2].rank, 3);
+    }
+
     fn empty_backup() -> PortableBackup {
         PortableBackup {
-            schema_version: 1,
+            schema_version: BACKUP_SCHEMA_VERSION,
             created_at: "2026-08-25T00:00:00Z".into(),
             app_version: "0.1.0".into(),
             language: "en".into(),
@@ -589,6 +666,47 @@ mod tests {
             moves: vec!["e4".into()],
             positions: vec!["start".into(), "after".into()],
             imported_at: "2026-08-25T00:00:00Z".into(),
+        }
+    }
+
+    fn sample_cache(multi_pv: u8) -> BackupCache {
+        let variations = (1..=multi_pv)
+            .map(|rank| BackupVariation {
+                rank,
+                score_cp: Some(30 - i64::from(rank) * 5),
+                mate: None,
+                depth: 18,
+                best_move: Some(format!("move{rank}")),
+                pv: vec![format!("move{rank}")],
+            })
+            .collect::<Vec<_>>();
+        let score_cp = variations[0].score_cp;
+        let mate = variations[0].mate;
+        let depth = variations[0].depth;
+        let best_move = variations[0].best_move.clone();
+        let pv = variations[0].pv.clone();
+        BackupCache {
+            game_fingerprint: "game".into(),
+            engine_name: "Stockfish".into(),
+            engine_version: "18".into(),
+            profile: "balanced".into(),
+            multi_pv,
+            analyzed_at: format!("2026-08-25T00:00:0{multi_pv}Z"),
+            evaluations: vec![BackupEvaluation {
+                game_fingerprint: "game".into(),
+                engine_name: "Stockfish".into(),
+                engine_version: "18".into(),
+                profile: "balanced".into(),
+                multi_pv,
+                position_index: 0,
+                score_cp,
+                mate,
+                depth,
+                best_move,
+                pv,
+                variations,
+                analyzed_at: format!("2026-08-25T00:00:0{multi_pv}Z"),
+            }],
         }
     }
 }

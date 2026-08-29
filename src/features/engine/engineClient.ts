@@ -4,6 +4,7 @@ import { open } from "@tauri-apps/plugin-dialog";
 import type {
   AnalysisProfile,
   EngineInfo,
+  MultiPv,
   PositionEvaluation,
 } from "../../types";
 
@@ -57,6 +58,7 @@ export async function analyzePositions(request: {
   enginePath: string;
   gameResult: string;
   depth: number;
+  multiPv: MultiPv;
   positions: string[];
   positionIndexes: number[];
 }): Promise<AnalyzeResponse> {

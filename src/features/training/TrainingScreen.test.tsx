@@ -51,10 +51,10 @@ describe("TrainingScreen", () => {
     const repository = new MemoryGameRepository();
     const record = analyzedGame();
     const engine: EngineInfo = { path: "stockfish.exe", name: "Stockfish", version: "18" };
-    await repository.saveEvaluations(record.fingerprint, engine, "balanced", [
-      { positionIndex: 0, scoreCp: 300, mate: null, depth: 18, bestMove: "d2d4", pv: ["d2d4", "d7d5"] },
-      { positionIndex: 1, scoreCp: 0, mate: null, depth: 18, bestMove: "e7e5", pv: ["e7e5"] },
-      { positionIndex: 2, scoreCp: 0, mate: null, depth: 18, bestMove: null, pv: [] },
+    await repository.saveEvaluations(record.fingerprint, engine, "balanced", 1, [
+      { positionIndex: 0, scoreCp: 300, mate: null, depth: 18, bestMove: "d2d4", pv: ["d2d4", "d7d5"], variations: [{ rank: 1, scoreCp: 300, mate: null, depth: 18, bestMove: "d2d4", pv: ["d2d4", "d7d5"] }] },
+      { positionIndex: 1, scoreCp: 0, mate: null, depth: 18, bestMove: "e7e5", pv: ["e7e5"], variations: [{ rank: 1, scoreCp: 0, mate: null, depth: 18, bestMove: "e7e5", pv: ["e7e5"] }] },
+      { positionIndex: 2, scoreCp: 0, mate: null, depth: 18, bestMove: null, pv: [], variations: [{ rank: 1, scoreCp: 0, mate: null, depth: 18, bestMove: null, pv: [] }] },
     ]);
     render(
       <TrainingScreen

@@ -42,6 +42,16 @@ const game: StoredGame = {
 const t = (key: Parameters<typeof translate>[1], variables?: Record<string, string | number>) =>
   translate("en", key, variables);
 
+function evaluation(
+  positionIndex: number,
+  scoreCp: number,
+  bestMove: string | null,
+  pv: string[],
+): PositionEvaluation {
+  const rankOne = { rank: 1 as const, scoreCp, mate: null, depth: 18, bestMove, pv };
+  return { positionIndex, scoreCp, mate: null, depth: 18, bestMove, pv, variations: [rankOne] };
+}
+
 describe("EnginePanel", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -52,9 +62,9 @@ describe("EnginePanel", () => {
 
   it("restores cached evaluations and follows the selected position", async () => {
     const repository = new MemoryGameRepository();
-    await repository.saveEvaluations(game.fingerprint, engine, "balanced", [
-      { positionIndex: 0, scoreCp: 35, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4", "e7e5"] },
-      { positionIndex: 1, scoreCp: -120, mate: null, depth: 18, bestMove: "e7e5", pv: ["e7e5"] },
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", 1, [
+      evaluation(0, 35, "e2e4", ["e2e4", "e7e5"]),
+      evaluation(1, -120, "e7e5", ["e7e5"]),
     ]);
     const view = render(<EnginePanel game={game} positionIndex={0} repository={repository} t={t} />);
 
@@ -73,14 +83,7 @@ describe("EnginePanel", () => {
       evaluation: PositionEvaluation;
     }) => void) | undefined;
     let finish: ((value: { evaluations: PositionEvaluation[]; cancelled: boolean }) => void) | undefined;
-    const evaluation: PositionEvaluation = {
-      positionIndex: 0,
-      scoreCp: 20,
-      mate: null,
-      depth: 18,
-      bestMove: "e2e4",
-      pv: ["e2e4"],
-    };
+    const partialEvaluation = evaluation(0, 20, "e2e4", ["e2e4"]);
     mocks.subscribe.mockImplementation(async (handler) => {
       progressHandler = handler;
       return () => undefined;
@@ -94,35 +97,30 @@ describe("EnginePanel", () => {
     fireEvent.click(analyzeButton);
     await waitFor(() => expect(progressHandler).toBeDefined());
     const analysisId = mocks.analyzePositions.mock.calls[0][0].analysisId as string;
-    act(() => progressHandler?.({ analysisId, current: 1, total: 2, evaluation }));
+    act(() => progressHandler?.({ analysisId, current: 1, total: 2, evaluation: partialEvaluation }));
     expect(screen.getByText("Position 1 of 2")).toBeInTheDocument();
     expect(screen.getByText("+0.20")).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
     await waitFor(() => expect(mocks.cancelAnalysis).toHaveBeenCalledWith(analysisId));
-    await act(async () => finish?.({ evaluations: [evaluation], cancelled: true }));
+    await act(async () => finish?.({ evaluations: [partialEvaluation], cancelled: true }));
     expect(await screen.findByText(/Partial results were saved/)).toBeInTheDocument();
-    expect(await repository.getAnalysis(game.fingerprint, engine, "balanced")).toHaveLength(1);
+    expect(await repository.getAnalysis(game.fingerprint, engine, "balanced", 1)).toHaveLength(1);
   });
 
   it("hides the previous cache and disables analysis while a new profile loads", async () => {
     const repository = new MemoryGameRepository();
     const onAnalysisStateChange = vi.fn();
-    await repository.saveEvaluations(game.fingerprint, engine, "balanced", [{
-      positionIndex: 0,
-      scoreCp: 35,
-      mate: null,
-      depth: 18,
-      bestMove: "e2e4",
-      pv: ["e2e4"],
-    }]);
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", 1, [
+      evaluation(0, 35, "e2e4", ["e2e4"]),
+    ]);
     const originalGetAnalysis = repository.getAnalysis.bind(repository);
     let finishDeepLoad: ((value: Awaited<ReturnType<typeof repository.getAnalysis>>) => void) | undefined;
-    vi.spyOn(repository, "getAnalysis").mockImplementation((fingerprint, selectedEngine, profile) => {
+    vi.spyOn(repository, "getAnalysis").mockImplementation((fingerprint, selectedEngine, profile, multiPv) => {
       if (profile === "deep") {
         return new Promise((resolve) => { finishDeepLoad = resolve; });
       }
-      return originalGetAnalysis(fingerprint, selectedEngine, profile);
+      return originalGetAnalysis(fingerprint, selectedEngine, profile, multiPv);
     });
 
     render(
@@ -145,7 +143,7 @@ describe("EnginePanel", () => {
     const analyzeButton = screen.getByRole("button", { name: "Analyze" });
     expect(analyzeButton).toBeDisabled();
     expect(screen.queryByText("+0.35")).not.toBeInTheDocument();
-    expect(screen.getByText(/Loading the analysis cache/)).toBeInTheDocument();
+    expect(screen.getByText(/Loading the matching engine/)).toBeInTheDocument();
     expect(onAnalysisStateChange).toHaveBeenCalledWith(expect.objectContaining({
       evaluations: [],
       loading: true,
@@ -167,6 +165,47 @@ describe("EnginePanel", () => {
     }));
   });
 
+  it("switches between matching line-count caches and requests only the selected count", async () => {
+    const repository = new MemoryGameRepository();
+    const oneLine = evaluation(0, 35, "e2e4", ["e2e4"]);
+    const threeLines: PositionEvaluation = {
+      ...evaluation(0, 55, "d2d4", ["d2d4"]),
+      variations: [
+        { rank: 1, scoreCp: 55, mate: null, depth: 18, bestMove: "d2d4", pv: ["d2d4"] },
+        { rank: 2, scoreCp: 40, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4"] },
+        { rank: 3, scoreCp: 20, mate: null, depth: 18, bestMove: "g1f3", pv: ["g1f3"] },
+      ],
+    };
+    const twoLines: PositionEvaluation = {
+      ...evaluation(0, 45, "c2c4", ["c2c4"]),
+      variations: [
+        { rank: 1, scoreCp: 45, mate: null, depth: 18, bestMove: "c2c4", pv: ["c2c4"] },
+        { rank: 2, scoreCp: 30, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4"] },
+      ],
+    };
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", 1, [oneLine]);
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", 3, [threeLines]);
+    mocks.analyzePositions.mockResolvedValue({ evaluations: [twoLines], cancelled: false });
+
+    render(<EnginePanel game={game} positionIndex={0} repository={repository} t={t} />);
+    expect(await screen.findByText("+0.35")).toBeInTheDocument();
+
+    fireEvent.change(screen.getByLabelText("Candidate lines"), { target: { value: "3" } });
+    expect(await screen.findByText("+0.55")).toBeInTheDocument();
+    expect(mocks.analyzePositions).not.toHaveBeenCalled();
+
+    fireEvent.change(screen.getByLabelText("Candidate lines"), { target: { value: "2" } });
+    const analyzeButton = await screen.findByRole("button", { name: "Analyze" });
+    await waitFor(() => expect(analyzeButton).toBeEnabled());
+    fireEvent.click(analyzeButton);
+    await waitFor(() => expect(mocks.analyzePositions).toHaveBeenCalledWith(
+      expect.objectContaining({ multiPv: 2 }),
+    ));
+    expect(await repository.getSetting("analysisMultiPv")).toBe("2");
+    expect(await repository.getAnalysis(game.fingerprint, engine, "balanced", 1)).toHaveLength(1);
+    expect(await repository.getAnalysis(game.fingerprint, engine, "balanced", 3)).toHaveLength(1);
+  });
+
   it.each([
     [0, "Analyze"],
     [1, "Resume analysis"],
@@ -175,10 +214,10 @@ describe("EnginePanel", () => {
     const repository = new MemoryGameRepository();
     const onAnalysisStateChange = vi.fn();
     const cached: PositionEvaluation[] = [
-      { positionIndex: 0, scoreCp: 35, mate: null, depth: 18, bestMove: "e2e4", pv: ["e2e4"] },
-      { positionIndex: 1, scoreCp: 20, mate: null, depth: 18, bestMove: null, pv: [] },
+      evaluation(0, 35, "e2e4", ["e2e4"]),
+      evaluation(1, 20, null, []),
     ].slice(0, cachedCount);
-    await repository.saveEvaluations(game.fingerprint, engine, "balanced", cached);
+    await repository.saveEvaluations(game.fingerprint, engine, "balanced", 1, cached);
     mocks.analyzePositions.mockImplementation(() => new Promise(() => undefined));
 
     render(
@@ -201,6 +240,7 @@ describe("EnginePanel", () => {
       engineStatus: "ready",
       loading: true,
       profile: "balanced",
+      multiPv: 1,
     });
     await waitFor(() => expect(onAnalysisStateChange).toHaveBeenLastCalledWith(expect.objectContaining({
       loading: true,

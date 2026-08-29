@@ -53,7 +53,7 @@ Public data can be delayed or cached by its provider. ChessMate is an independen
 
 ## Local Stockfish analysis
 
-ChessMate first checks the standard En Croissant Stockfish folder. If no valid engine is found, choose a local `.exe` from the review screen. The executable is validated with `uciok` and `readyok`; its path and the Quick (depth 12), Balanced (depth 18), or Deep (depth 22) profile are stored only in ChessMate's local database.
+ChessMate first checks the standard En Croissant Stockfish folder. If no valid engine is found, choose a local `.exe` from the review screen. The executable is validated with `uciok` and `readyok`; its path, the Quick (depth 12), Balanced (depth 18), or Deep (depth 22) profile, and a choice of one to three candidate lines are stored only in ChessMate's local database. Each line-count choice has its own compatible cache, so switching choices never disguises or deletes another analysis.
 
 Stockfish is not downloaded or bundled by ChessMate. Games and positions never leave the computer during analysis.
 
