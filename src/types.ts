@@ -1,5 +1,7 @@
 export type Language = "en" | "fr";
 
+export type MoveNotationMode = "pieces" | "san";
+
 export type RejectionReason =
   | "emptyFile"
   | "invalidPgn"

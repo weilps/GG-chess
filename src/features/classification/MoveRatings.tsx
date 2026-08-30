@@ -34,7 +34,6 @@ export function AccuracySummary({ accuracy, t }: {
     <>
       <div className="accuracy-heading">
         <span className="eyebrow">{t("chessMateAccuracy")}</span>
-        <small>{t("accuracyIndependentFormula")}</small>
       </div>
       <div className="accuracy-sides">
         <div><span>{t("white")}</span><strong>{accuracyValue(accuracy.white)}</strong></div>

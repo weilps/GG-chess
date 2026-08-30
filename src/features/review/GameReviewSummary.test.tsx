@@ -11,17 +11,16 @@ const ratings: MoveClassification[] = [
 ];
 
 describe("GameReviewSummary", () => {
-  it("shows accuracy, per-side counts, and navigable critical moments", () => {
+  it("shows per-side counts and navigable critical moments without duplicating accuracy", () => {
     const onSelectPosition = vi.fn();
     render(
       <GameReviewSummary
         ratings={ratings}
-        accuracy={{ white: 71.2, black: 81.3 }}
         onSelectPosition={onSelectPosition}
         t={(key, variables) => translate("en", key, variables)}
       />,
     );
-    expect(screen.getByText("71.2")).toBeInTheDocument();
+    expect(screen.queryByText("ChessMate Accuracy")).not.toBeInTheDocument();
     expect(screen.getByTestId("classification-white-blunder")).toHaveTextContent("1");
     expect(screen.getByTestId("classification-white-blunder").querySelector('[data-rating-icon="blunder"]')).toBeInTheDocument();
     expect(screen.getByTestId("classification-black-mistake")).toHaveTextContent("1");
@@ -37,7 +36,6 @@ describe("GameReviewSummary", () => {
     render(
       <GameReviewSummary
         ratings={[]}
-        accuracy={{ white: null, black: null }}
         onSelectPosition={vi.fn()}
         t={(key, variables) => translate("fr", key, variables)}
       />,

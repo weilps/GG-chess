@@ -2,10 +2,10 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Chessboard } from "react-chessboard";
 import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
-import type { AnalysisSnapshot, Language, StoredGame } from "../../types";
+import type { AnalysisSnapshot, Language, MoveNotationMode, StoredGame } from "../../types";
 import { buildCodexAdviceIdentity, buildCodexAdviceRequest } from "../adviser/codexClient";
 import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
-import { MoveRatingBadge } from "../classification/MoveRatings";
+import { AccuracySummary, MoveRatingBadge } from "../classification/MoveRatings";
 import { CoachPanel, type CoachEmptyState } from "../coach/CoachPanel";
 import { buildCoachInsight } from "../coach/coachInsight";
 import { EnginePanel } from "../engine/EnginePanel";
@@ -14,6 +14,7 @@ import { buildBoardGuidance } from "./boardGuidance";
 import { EvaluationBar } from "./EvaluationBar";
 import { EvaluationChart } from "./EvaluationChart";
 import { GameReviewSummary } from "./GameReviewSummary";
+import { MovePieceIcon } from "./MovePieceIcon";
 import { shouldPreserveReviewArrowKey } from "./reviewKeyboard";
 
 interface ReviewScreenProps {
@@ -75,6 +76,7 @@ export function ReviewScreen({
   const [positionIndex, setPositionIndex] = useState(0);
   const [orientation, setOrientation] = useState<"white" | "black">("white");
   const [reviewTab, setReviewTab] = useState<"moves" | "summary">("moves");
+  const [moveNotation, setMoveNotation] = useState<MoveNotationMode>("pieces");
   const [moreMenuOpen, setMoreMenuOpen] = useState(false);
   const moreButtonRef = useRef<HTMLButtonElement | null>(null);
   const moreMenuRef = useRef<HTMLDivElement | null>(null);
@@ -90,6 +92,16 @@ export function ReviewScreen({
   });
   const lastPositionIndex = game.positions.length - 1;
   const isCompletedGame = ["1-0", "0-1", "1/2-1/2"].includes(game.result);
+
+  useEffect(() => {
+    let active = true;
+    repository.getSetting("moveNotation")
+      .then((saved) => {
+        if (active && (saved === "pieces" || saved === "san")) setMoveNotation(saved);
+      })
+      .catch(() => undefined);
+    return () => { active = false; };
+  }, [repository]);
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
@@ -204,6 +216,11 @@ export function ReviewScreen({
   const goTo = (next: number) =>
     setPositionIndex(Math.min(lastPositionIndex, Math.max(0, next)));
 
+  const changeMoveNotation = (mode: MoveNotationMode) => {
+    setMoveNotation(mode);
+    void repository.setSetting("moveNotation", mode).catch(() => undefined);
+  };
+
   const selectReviewTab = (tab: "moves" | "summary") => {
     setReviewTab(tab);
     window.requestAnimationFrame(() => document.getElementById(`review-${tab}-tab`)?.focus());
@@ -236,6 +253,8 @@ export function ReviewScreen({
               repository={repository}
               t={t}
               onAnalysisStateChange={setAnalysisSnapshot}
+              moveNotation={moveNotation}
+              onMoveNotationChange={changeMoveNotation}
             />
           ) : (
             <span className="analysis-header-unavailable" title={t("analysisFinishedGamesOnly")}>
@@ -334,6 +353,9 @@ export function ReviewScreen({
             t={t}
           />
           <div className="review-lower-panel">
+            <div className="review-accuracy-strip">
+              <AccuracySummary accuracy={accuracy} t={t} />
+            </div>
             <div className="review-tabs" role="tablist" aria-label={t("reviewPanels")}>
               <button
                 id="review-moves-tab"
@@ -374,16 +396,23 @@ export function ReviewScreen({
                   {movePairs.map((pair) => {
                     const whiteIndex = (pair.number - 1) * 2 + 1;
                     const blackIndex = whiteIndex + 1;
+                    const whiteSan = pair.white ?? "—";
                     return (
                       <div className="move-row" key={pair.number}>
                         <span className="move-number">{pair.number}.</span>
                         <button className={positionIndex === whiteIndex ? "selected-move" : ""} onClick={() => goTo(whiteIndex)}>
-                          <span>{pair.white}</span>
+                          <span className="move-san">
+                            {moveNotation === "pieces" ? <MovePieceIcon san={whiteSan} /> : null}
+                            <span>{whiteSan}</span>
+                          </span>
                           <MoveRatingBadge rating={moveRatings[whiteIndex - 1]} t={t} />
                         </button>
                         {pair.black ? (
                           <button className={positionIndex === blackIndex ? "selected-move" : ""} onClick={() => goTo(blackIndex)}>
-                            <span>{pair.black}</span>
+                            <span className="move-san">
+                              {moveNotation === "pieces" ? <MovePieceIcon san={pair.black} /> : null}
+                              <span>{pair.black}</span>
+                            </span>
                             <MoveRatingBadge rating={moveRatings[blackIndex - 1]} t={t} />
                           </button>
                         ) : <span />}
@@ -401,7 +430,6 @@ export function ReviewScreen({
               >
                 <GameReviewSummary
                   ratings={moveRatings}
-                  accuracy={accuracy}
                   onSelectPosition={goTo}
                   t={t}
                 />

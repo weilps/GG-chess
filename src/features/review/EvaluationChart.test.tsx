@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
 import type { MoveClassification, PositionEvaluation } from "../../types";
@@ -20,7 +20,7 @@ const ratings: MoveClassification[] = [{
 }];
 
 describe("EvaluationChart", () => {
-  it("navigates from accessible graph points with click and keyboard", () => {
+  it("navigates from accessible graph points with click and keyboard", async () => {
     const onSelectPosition = vi.fn();
     render(
       <EvaluationChart
@@ -39,13 +39,20 @@ describe("EvaluationChart", () => {
     });
     fireEvent.click(movePoint);
     fireEvent.keyDown(movePoint, { key: "Enter" });
+    movePoint.focus();
+    fireEvent.keyDown(movePoint, { key: "ArrowLeft" });
     expect(onSelectPosition).toHaveBeenNthCalledWith(1, 1);
     expect(onSelectPosition).toHaveBeenNthCalledWith(2, 1);
-    expect(screen.getByRole("button", { name: /Starting position/ })).toHaveAttribute("aria-current", "true");
+    expect(onSelectPosition).toHaveBeenNthCalledWith(3, 0);
+    const startingPoint = screen.getByRole("button", { name: /Starting position/ });
+    expect(startingPoint).toHaveAttribute("aria-current", "true");
+    await waitFor(() => expect(startingPoint).toHaveFocus());
     expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("stroke-width", "44");
     expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("vector-effect", "non-scaling-stroke");
     expect(screen.getByText("Best")).toBeInTheDocument();
     expect(movePoint.querySelector(".chart-rating-glyph")).toBeInTheDocument();
+    expect(document.querySelector(".chart-selection-line")).toBeInTheDocument();
+    expect(document.querySelector(".chart-selection-ring")).toBeInTheDocument();
     expect(document.querySelector('.chart-legend-icon [data-rating-icon="best"]')).toBeInTheDocument();
   });
 
@@ -65,7 +72,7 @@ describe("EvaluationChart", () => {
     expect(screen.queryByRole("button", { name: /Position/ })).not.toBeInTheDocument();
   });
 
-  it("keeps compact extreme hit targets inside the clipped chart bounds", () => {
+  it("uses the full compact chart width for extreme evaluations", () => {
     render(
       <EvaluationChart
         compact
@@ -86,9 +93,9 @@ describe("EvaluationChart", () => {
       .querySelector(".evaluation-point-hit");
     const lastHitTarget = screen.getByRole("button", { name: /Position 1/ })
       .querySelector(".evaluation-point-hit");
-    expect(firstHitTarget).toHaveAttribute("cx", "64");
-    expect(firstHitTarget).toHaveAttribute("cy", "64");
-    expect(lastHitTarget).toHaveAttribute("cx", "656");
-    expect(lastHitTarget).toHaveAttribute("cy", "126");
+    expect(firstHitTarget).toHaveAttribute("cx", "34");
+    expect(firstHitTarget).toHaveAttribute("cy", "12");
+    expect(lastHitTarget).toHaveAttribute("cx", "708");
+    expect(lastHitTarget).toHaveAttribute("cy", "166");
   });
 });
