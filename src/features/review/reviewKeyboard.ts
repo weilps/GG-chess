@@ -18,7 +18,16 @@ const ARROW_KEY_CONTROL_SELECTOR = [
 export function shouldPreserveReviewArrowKey(target: EventTarget | null): boolean {
   const element = target instanceof Element ? target : document.activeElement;
   const ownerDocument = element?.ownerDocument ?? document;
-  if (ownerDocument.querySelector("[role='dialog'], [role='menu'], [popover]:not([hidden])")) {
+  const activeLayer = Array.from(
+    ownerDocument.querySelectorAll<HTMLElement>("[role='dialog'], [role='menu'], [popover]"),
+  ).some((layer) => {
+    if (layer.hidden || layer.getAttribute("aria-hidden") === "true") {
+      return false;
+    }
+    const style = ownerDocument.defaultView?.getComputedStyle(layer);
+    return style?.display !== "none" && style?.visibility !== "hidden";
+  });
+  if (activeLayer) {
     return true;
   }
   return Boolean(element?.closest(ARROW_KEY_CONTROL_SELECTOR));

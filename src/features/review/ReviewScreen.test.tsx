@@ -82,7 +82,11 @@ describe("ReviewScreen", () => {
 
     const popover = document.createElement("div");
     popover.setAttribute("popover", "auto");
+    popover.style.display = "none";
     host.append(popover);
+    expect(shouldPreserveReviewArrowKey(ordinaryButton)).toBe(false);
+
+    popover.style.display = "block";
     expect(shouldPreserveReviewArrowKey(ordinaryButton)).toBe(true);
     host.remove();
   });
