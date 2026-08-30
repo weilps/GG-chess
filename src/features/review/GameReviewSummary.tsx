@@ -2,6 +2,7 @@ import type { TranslationKey } from "../../i18n/translations";
 import type { GameAccuracy, MoveClassification } from "../../types";
 import { formatCentipawnLoss } from "../classification/classifyMoves";
 import { AccuracySummary, MoveRatingBadge } from "../classification/MoveRatings";
+import { RatingIcon } from "../classification/RatingIcon";
 import { ratingLabel } from "../classification/ratingPresentation";
 import {
   countClassifications,
@@ -45,7 +46,9 @@ export function GameReviewSummary({
                     title={ratingLabel(classification, t)}
                     data-testid={`classification-${color}-${classification}`}
                   >
-                    <i className={`rating-${classification}`} aria-hidden="true" />
+                    <span className={`summary-rating-icon rating-${classification}`} aria-hidden="true">
+                      <RatingIcon classification={classification} decorative />
+                    </span>
                     <b>{counts[color][classification]}</b>
                     <small>{ratingLabel(classification, t)}</small>
                   </span>

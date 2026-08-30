@@ -18,7 +18,7 @@ const brilliant: MoveClassification = {
 describe("MoveRatings", () => {
   it("renders an accessible localized badge", () => {
     render(<MoveRatingBadge rating={brilliant} t={(key, variables) => translate("fr", key, variables)} />);
-    expect(screen.getByLabelText("Brillant")).toHaveTextContent("!!");
+    expect(screen.getByLabelText("Brillant").querySelector('[data-rating-icon="brilliant"]')).toBeInTheDocument();
   });
 
   it("shows per-side accuracy and the selected move explanation", () => {

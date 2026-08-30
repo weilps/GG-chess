@@ -1,6 +1,7 @@
 import type { KeyboardEvent } from "react";
 import type { TranslationKey } from "../../i18n/translations";
 import type { MoveClassification, PositionEvaluation } from "../../types";
+import { RatingIcon, RatingIconGlyph } from "../classification/RatingIcon";
 import { ratingLabel } from "../classification/ratingPresentation";
 import {
   buildEvaluationSegments,
@@ -36,14 +37,17 @@ function pointLabel(
   moves: string[],
   gameResult: string,
   t: Translate,
+  rating?: MoveClassification,
 ): string {
   const formatted = formatWhiteEvaluation(evaluation, gameResult);
-  if (positionIndex === 0) return t("chartStartingPosition", { evaluation: formatted });
-  return t("chartMovePosition", {
+  const base = positionIndex === 0
+    ? t("chartStartingPosition", { evaluation: formatted })
+    : t("chartMovePosition", {
     position: positionIndex,
     move: moves[positionIndex - 1] ?? "—",
     evaluation: formatted,
   });
+  return rating ? `${base}, ${ratingLabel(rating.classification, t)}` : base;
 }
 
 export function EvaluationChart({
@@ -127,7 +131,7 @@ export function EvaluationChart({
                 role="button"
                 tabIndex={0}
                 aria-current={selected ? "true" : undefined}
-                aria-label={pointLabel(point.positionIndex, point.evaluation, moves, gameResult, t)}
+                aria-label={pointLabel(point.positionIndex, point.evaluation, moves, gameResult, t, rating)}
                 onClick={() => onSelectPosition(point.positionIndex)}
                 onKeyDown={(event) => activate(event, point.positionIndex)}
               >
@@ -147,9 +151,24 @@ export function EvaluationChart({
                   className={`evaluation-point ${rating ? `rating-${rating.classification}` : "chart-neutral"}${selected ? " selected-chart-point" : ""}`}
                   cx={pointX(point.positionIndex, positionCount, compact)}
                   cy={pointY(point.value, compact)}
-                  r={selected ? 6 : 4}
+                  r={selected ? 8 : 7}
                   pointerEvents="none"
                 />
+                {rating ? (
+                  <g
+                    aria-hidden="true"
+                    className={`chart-rating-glyph rating-tone-${rating.classification}`}
+                    transform={`translate(${pointX(point.positionIndex, positionCount, compact) - 5} ${pointY(point.value, compact) - 5}) scale(.4167)`}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.4"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    pointerEvents="none"
+                  >
+                    <RatingIconGlyph classification={rating.classification} />
+                  </g>
+                ) : null}
               </g>
             );
           })}
@@ -158,7 +177,9 @@ export function EvaluationChart({
       <div className="chart-legend" aria-label={t("chartLegend")}>
         {SUMMARY_CLASSIFICATIONS.map((classification) => (
           <span key={classification}>
-            <i className={`rating-${classification}`} aria-hidden="true" />
+            <span className={`chart-legend-icon rating-${classification}`} aria-hidden="true">
+              <RatingIcon classification={classification} decorative />
+            </span>
             {ratingLabel(classification, t)}
           </span>
         ))}

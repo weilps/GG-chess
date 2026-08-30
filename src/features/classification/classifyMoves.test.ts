@@ -1,8 +1,9 @@
 import { Chess } from "chess.js";
 import { describe, expect, it } from "vitest";
-import type { PositionEvaluation } from "../../types";
+import type { PositionEvaluation, RankedVariation } from "../../types";
 import {
   calculateGameAccuracy,
+  classifyCandidateVariations,
   classifyFromFacts,
   classifyGameMoves,
   evaluationToWhiteCentipawns,
@@ -129,6 +130,97 @@ describe("classifyGameMoves", () => {
       { moves: ["bad"], positions: [start, start], result: "1-0" },
       [evaluation(0, 0, null), evaluation(1, 0, null)],
     )[0]).toMatchObject({ classification: "notRated", reason: "invalidMove" });
+  });
+});
+
+describe("classifyCandidateVariations", () => {
+  function candidateEvaluation(
+    fen: string,
+    variations: RankedVariation[],
+  ): { fen: string; evaluation: PositionEvaluation } {
+    const first = variations[0];
+    return {
+      fen,
+      evaluation: {
+        positionIndex: 0,
+        scoreCp: first.scoreCp,
+        mate: first.mate,
+        depth: first.depth,
+        bestMove: first.bestMove,
+        pv: first.pv,
+        variations,
+      },
+    };
+  }
+
+  const candidate = (
+    rank: 1 | 2 | 3,
+    bestMove: string,
+    scoreCp: number | null,
+    mate: number | null = null,
+  ): RankedVariation => ({ rank, bestMove, scoreCp, mate, depth: 18, pv: [bestMove] });
+
+  it("classifies every requested White candidate relative to rank one", () => {
+    const { fen, evaluation: root } = candidateEvaluation(new Chess().fen(), [
+      candidate(1, "e2e4", 100),
+      candidate(2, "d2d4", 85),
+      candidate(3, "g1f3", 0),
+    ]);
+    expect(classifyCandidateVariations(fen, root, "1-0")).toMatchObject([
+      { rank: 1, classification: "best", centipawnLoss: 0 },
+      { rank: 2, classification: "excellent", centipawnLoss: 15 },
+      { rank: 3, classification: "inaccuracy", centipawnLoss: 100 },
+    ]);
+  });
+
+  it("normalizes candidate loss for Black and detects a missed win", () => {
+    const blackFen = positionsFor(["e4"])[1];
+    const blackRoot = candidateEvaluation(blackFen, [
+      candidate(1, "c7c5", -100),
+      candidate(2, "e7e5", -50),
+    ]).evaluation;
+    expect(classifyCandidateVariations(blackFen, blackRoot, "0-1")[1]).toMatchObject({
+      classification: "good",
+      centipawnLoss: 50,
+    });
+
+    const whiteRoot = candidateEvaluation(new Chess().fen(), [
+      candidate(1, "e2e4", 300),
+      candidate(2, "d2d4", 50),
+    ]).evaluation;
+    expect(classifyCandidateVariations(new Chess().fen(), whiteRoot, "1-0")[1].classification).toBe("miss");
+  });
+
+  it("can mark a best sacrifice Brilliant and a mating root Great", () => {
+    const sacrificeFen = "4k3/8/8/1p6/8/8/8/3QK3 w - - 0 1";
+    const sacrifice = candidateEvaluation(sacrificeFen, [candidate(1, "d1a4", 0)]).evaluation;
+    expect(classifyCandidateVariations(sacrificeFen, sacrifice, "1-0")[0].classification).toBe("brilliant");
+
+    const mateFen = "7k/5P2/8/8/8/8/8/4K3 w - - 0 1";
+    const mate = candidateEvaluation(mateFen, [candidate(1, "f7f8q", null, 1)]).evaluation;
+    expect(classifyCandidateVariations(mateFen, mate, "1-0")[0].classification).toBe("great");
+  });
+
+  it("marks a best material recovery Great without another engine score", () => {
+    const recoveryFen = "r3k2q/8/8/8/8/8/8/Q3K3 w - - 0 1";
+    const recovery = candidateEvaluation(recoveryFen, [candidate(1, "a1a8", 0)]).evaluation;
+    expect(classifyCandidateVariations(recoveryFen, recovery, "1-0")[0]).toMatchObject({
+      classification: "great",
+      reason: "greatRecovery",
+    });
+  });
+
+  it("returns explicit unrated candidates for missing scores and invalid roots", () => {
+    const root = candidateEvaluation(new Chess().fen(), [
+      candidate(1, "e2e4", 20),
+      candidate(2, "bad", 10),
+      candidate(3, "g1f3", null),
+    ]).evaluation;
+    expect(classifyCandidateVariations(new Chess().fen(), root, "1-0")).toMatchObject([
+      { rank: 1, classification: "best" },
+      { rank: 2, classification: "notRated", reason: "invalidMove" },
+      { rank: 3, classification: "notRated", reason: "missingEvaluation" },
+    ]);
   });
 });
 

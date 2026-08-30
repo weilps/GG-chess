@@ -25,19 +25,6 @@ export const RATING_REASON_KEYS: Record<MoveClassificationReason, TranslationKey
   invalidMove: "ratingReasonInvalidMove",
 };
 
-export const RATING_SYMBOLS: Record<MoveClassificationId, string> = {
-  brilliant: "!!",
-  great: "!",
-  best: "★",
-  excellent: "✓+",
-  good: "✓",
-  inaccuracy: "?!",
-  mistake: "?",
-  miss: "×",
-  blunder: "??",
-  notRated: "—",
-};
-
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 
 export function ratingLabel(rating: MoveClassificationId, t: Translate): string {

@@ -1,10 +1,12 @@
 import { BLACK, Chess, WHITE, type Color, type Move, type PieceSymbol } from "chess.js";
 import type {
+  CandidateMoveClassification,
   GameAccuracy,
   MoveClassification,
   MoveClassificationId,
   MoveClassificationReason,
   PositionEvaluation,
+  RankedVariation,
   StoredGame,
 } from "../../types";
 
@@ -43,7 +45,7 @@ function mateScore(mate: number, gameResult: string): number {
 }
 
 export function evaluationToWhiteCentipawns(
-  evaluation: PositionEvaluation,
+  evaluation: Pick<RankedVariation, "mate" | "scoreCp">,
   gameResult: string,
 ): number {
   if (evaluation.mate !== null) return mateScore(evaluation.mate, gameResult);
@@ -111,6 +113,117 @@ export function classifyFromFacts(facts: ClassificationFacts): ClassificationDec
     return { classification: "mistake", reason: "centipawnLoss" };
   }
   return { classification: "blunder", reason: "centipawnLoss" };
+}
+
+const CANDIDATE_UCI = /^([a-h][1-8])([a-h][1-8])([qrbn])?$/;
+
+function candidateMove(chess: Chess, uci: string | null): Move | null {
+  const match = uci ? CANDIDATE_UCI.exec(uci) : null;
+  if (!match) return null;
+  try {
+    return chess.move({
+      from: match[1],
+      to: match[2],
+      ...(match[3] ? { promotion: match[3] } : {}),
+    });
+  } catch {
+    return null;
+  }
+}
+
+function materialCentipawns(chess: Chess, mover: Color): number {
+  return chess.board().flat().reduce((balance, piece) => {
+    if (!piece || piece.type === "k") return balance;
+    const value = PIECE_VALUE[piece.type] * 100;
+    return balance + (piece.color === mover ? value : -value);
+  }, 0);
+}
+
+function unratedCandidate(
+  variation: RankedVariation,
+  uci: string | null,
+  reason: "missingEvaluation" | "invalidMove",
+): CandidateMoveClassification {
+  return {
+    rank: variation.rank,
+    uci,
+    classification: "notRated",
+    reason,
+    centipawnLoss: null,
+  };
+}
+
+/**
+ * Classifies the stored root alternatives without asking Stockfish for more
+ * work. MultiPV scores are already normalized to White perspective by Tauri.
+ */
+export function classifyCandidateVariations(
+  fen: string,
+  evaluation: PositionEvaluation,
+  gameResult: string,
+): CandidateMoveClassification[] {
+  let moverSign: 1 | -1;
+  let moverColor: Color;
+  try {
+    moverColor = new Chess(fen).turn();
+    moverSign = moverColor === WHITE ? 1 : -1;
+  } catch {
+    return evaluation.variations.map((variation) => (
+      unratedCandidate(variation, variation.bestMove ?? variation.pv[0] ?? null, "invalidMove")
+    ));
+  }
+
+  const variations = [...evaluation.variations].sort((left, right) => left.rank - right.rank);
+  const best = variations.find((variation) => variation.rank === 1);
+  if (!best || (best.scoreCp === null && best.mate === null)) {
+    return variations.map((variation) => (
+      unratedCandidate(variation, variation.bestMove ?? variation.pv[0] ?? null, "missingEvaluation")
+    ));
+  }
+
+  const bestMover = moverSign * evaluationToWhiteCentipawns(best, gameResult);
+  const bestIsMate = best.mate !== null && bestMover > MATE_CP / 2;
+  return variations.map((variation) => {
+    const uci = variation.bestMove ?? variation.pv[0] ?? null;
+    if (variation.scoreCp === null && variation.mate === null) {
+      return unratedCandidate(variation, uci, "missingEvaluation");
+    }
+    let chess: Chess;
+    try {
+      chess = new Chess(fen);
+    } catch {
+      return unratedCandidate(variation, uci, "invalidMove");
+    }
+    const materialBefore = materialCentipawns(chess, moverColor);
+    const move = candidateMove(chess, uci);
+    if (!move) return unratedCandidate(variation, uci, "invalidMove");
+
+    const candidateMover = moverSign * evaluationToWhiteCentipawns(variation, gameResult);
+    const centipawnLoss = Math.max(0, bestMover - candidateMover);
+    const candidateIsMate = variation.mate !== null && candidateMover > MATE_CP / 2;
+    const isBestMove = variation.rank === 1
+      && uci === (evaluation.bestMove ?? evaluation.pv[0] ?? null);
+    const decision = classifyFromFacts({
+      centipawnLoss,
+      isBestMove,
+      isSoundSacrifice: isBestMove
+        && offersSoundMaterial(move, chess.fen(), candidateMover),
+      foundMate: isBestMove && candidateIsMate,
+      // A root score already includes its best move, so it cannot express a
+      // before/after recovery by itself. Material before and after the stored
+      // root move supplies the same deterministic recovery fact without a
+      // second engine analysis.
+      recoveredPosition: materialBefore <= -150
+        && materialCentipawns(chess, moverColor) >= -50,
+      missedWin: (bestMover >= 250 || bestIsMate) && candidateMover < 75 && !candidateIsMate,
+    });
+    return {
+      rank: variation.rank,
+      uci,
+      ...decision,
+      centipawnLoss,
+    };
+  });
 }
 
 function notRated(

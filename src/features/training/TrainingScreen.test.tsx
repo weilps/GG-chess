@@ -7,6 +7,7 @@ import { MemoryGameRepository } from "../../lib/db/gameRepository";
 import type { EngineInfo, StoredGame } from "../../types";
 import { weekStartMonday } from "./trainingData";
 import { TrainingScreen } from "./TrainingScreen";
+import "../../styles.css";
 
 function analyzedGame(): StoredGame {
   const chess = new Chess();
@@ -66,7 +67,10 @@ describe("TrainingScreen", () => {
     );
 
     expect(await screen.findByText("Your move. Rewrite this moment.")).toBeInTheDocument();
-    expect(screen.getByText("Miss")).toBeInTheDocument();
+    const severityLabel = screen.getByText("Miss");
+    const severityBadge = severityLabel.parentElement;
+    expect(severityBadge).not.toBeNull();
+    expect(getComputedStyle(severityLabel).color).toBe(getComputedStyle(severityBadge!).color);
     await userEvent.selectOptions(screen.getByLabelText("Coach profile"), "playful");
     expect(screen.getByText(/Past-you left a little mess/)).toBeInTheDocument();
     expect(screen.getByText("Miss")).toBeInTheDocument();

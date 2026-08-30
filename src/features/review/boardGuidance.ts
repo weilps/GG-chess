@@ -1,12 +1,17 @@
 import type {
   GuidanceMode,
   MoveClassification,
+  MoveClassificationId,
+  MoveClassificationReason,
   MultiPv,
   PositionEvaluation,
   RankedVariation,
   StoredGame,
 } from "../../types";
-import { playedMoveFromSan } from "../classification/classifyMoves";
+import {
+  classifyCandidateVariations,
+  playedMoveFromSan,
+} from "../classification/classifyMoves";
 
 export type BoardOrientation = "white" | "black";
 export type GuidanceTone = "ranked" | "warning" | "blunder";
@@ -20,6 +25,9 @@ export interface GuidanceArrow {
   evaluation: string | null;
   played: boolean;
   warningSymbol: "!" | "!!" | null;
+  classification: MoveClassificationId;
+  classificationReason: MoveClassificationReason;
+  centipawnLoss: number | null;
 }
 
 export interface BoardGuidancePlan {
@@ -81,6 +89,9 @@ function playedArrow(
     evaluation: null,
     played: true,
     warningSymbol: blunder ? "!!" : "!",
+    classification: selectedRating.classification,
+    classificationReason: selectedRating.reason,
+    centipawnLoss: selectedRating.centipawnLoss,
   };
 }
 
@@ -104,9 +115,18 @@ export function buildBoardGuidance(options: BuildBoardGuidanceOptions): BoardGui
     || expectedRanks.some((rank, index) => variations[index]?.rank !== rank)) return empty();
 
   const arrows: GuidanceArrow[] = [];
+  const candidateRatings = new Map(
+    classifyCandidateVariations(
+      options.game.positions[boardPositionIndex],
+      evaluation,
+      options.game.result,
+    ).map((rating) => [rating.rank, rating]),
+  );
   for (const variation of variations) {
     const move = variationMove(variation);
     if (!move) return empty();
+    const rating = candidateRatings.get(variation.rank);
+    if (!rating) return empty();
     arrows.push({
       key: `rank-${variation.rank}-${move.sourceSquare}-${move.targetSquare}`,
       ...move,
@@ -115,6 +135,9 @@ export function buildBoardGuidance(options: BuildBoardGuidanceOptions): BoardGui
       evaluation: formatGuidanceEvaluation(variation),
       played: false,
       warningSymbol: null,
+      classification: rating.classification,
+      classificationReason: rating.reason,
+      centipawnLoss: rating.centipawnLoss,
     });
   }
 
@@ -126,6 +149,9 @@ export function buildBoardGuidance(options: BuildBoardGuidanceOptions): BoardGui
   if (duplicate) {
     duplicate.played = true;
     duplicate.warningSymbol = actual.warningSymbol;
+    duplicate.classification = actual.classification;
+    duplicate.classificationReason = actual.classificationReason;
+    duplicate.centipawnLoss = actual.centipawnLoss;
     return { boardPositionIndex, arrows };
   }
   return { boardPositionIndex, arrows: [...arrows, actual] };

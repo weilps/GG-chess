@@ -122,6 +122,14 @@ export interface MoveClassification {
   centipawnLoss: number | null;
 }
 
+export interface CandidateMoveClassification {
+  rank: MultiPv;
+  uci: string | null;
+  classification: MoveClassificationId;
+  reason: MoveClassificationReason;
+  centipawnLoss: number | null;
+}
+
 export interface GameAccuracy {
   white: number | null;
   black: number | null;

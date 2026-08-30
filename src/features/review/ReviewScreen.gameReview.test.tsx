@@ -111,7 +111,7 @@ describe("ReviewScreen Game Review integration", () => {
     );
 
     const firstMovePoint = await screen.findByRole("button", {
-      name: "Position 1, after e4, evaluation +0.50",
+      name: "Position 1, after e4, evaluation +0.50, Best",
     });
     fireEvent.click(firstMovePoint);
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);

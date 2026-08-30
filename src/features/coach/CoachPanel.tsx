@@ -9,9 +9,9 @@ import type {
 import { formatCentipawnLoss } from "../classification/classifyMoves";
 import {
   RATING_REASON_KEYS,
-  RATING_SYMBOLS,
   ratingLabel,
 } from "../classification/ratingPresentation";
+import { MoveRatingBadge } from "../classification/MoveRatings";
 import type { CoachInsight, CoachLineStatus, CoachTipId } from "./coachInsight";
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
@@ -107,12 +107,7 @@ export function CoachPanel({
           <span className="eyebrow">{t("coachPanel")}</span>
           {insight ? (
             <strong className="coach-rating-headline" data-testid="coach-rating-headline">
-              <span
-                className={`move-rating-badge rating-${insight.rating.classification}`}
-                aria-hidden="true"
-              >
-                {RATING_SYMBOLS[insight.rating.classification]}
-              </span>
+              <MoveRatingBadge rating={insight.rating} t={t} />
               <span>{ratingLabel(insight.rating.classification, t)}</span>
               <span aria-hidden="true">·</span>
               <span>{insight.after ?? "—"}</span>
