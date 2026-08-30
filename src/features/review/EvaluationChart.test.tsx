@@ -94,8 +94,17 @@ describe("EvaluationChart", () => {
     const lastHitTarget = screen.getByRole("button", { name: /Position 1/ })
       .querySelector(".evaluation-point-hit");
     expect(firstHitTarget).toHaveAttribute("cx", "34");
-    expect(firstHitTarget).toHaveAttribute("cy", "12");
+    expect(firstHitTarget).toHaveAttribute("cy", "45");
     expect(lastHitTarget).toHaveAttribute("cx", "708");
-    expect(lastHitTarget).toHaveAttribute("cy", "166");
+    expect(lastHitTarget).toHaveAttribute("cy", "145");
+
+    const chart = document.querySelector<SVGSVGElement>(".evaluation-chart");
+    const viewBoxHeight = Number(chart?.getAttribute("viewBox")?.split(" ")[3]);
+    const compactChartHeight = 96;
+    const hitRadius = 22;
+    const firstScreenY = Number(firstHitTarget?.getAttribute("cy")) / viewBoxHeight * compactChartHeight;
+    const lastScreenY = Number(lastHitTarget?.getAttribute("cy")) / viewBoxHeight * compactChartHeight;
+    expect(firstScreenY).toBeGreaterThanOrEqual(hitRadius);
+    expect(compactChartHeight - lastScreenY).toBeGreaterThanOrEqual(hitRadius);
   });
 });

@@ -15,6 +15,9 @@ const LEFT = 34;
 const RIGHT = 12;
 const TOP = 12;
 const BOTTOM = 24;
+// The compact SVG is 96px high. A 45-unit inset keeps the 44px hit stroke
+// fully inside its 190-unit viewBox, including at the evaluation extremes.
+const COMPACT_VERTICAL_INSET = 45;
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 
@@ -22,8 +25,18 @@ function pointX(positionIndex: number, positionCount: number): number {
   return LEFT + (positionIndex / Math.max(1, positionCount - 1)) * (WIDTH - LEFT - RIGHT);
 }
 
-function pointY(value: number): number {
-  return TOP + ((10 - value) / 20) * (HEIGHT - TOP - BOTTOM);
+function chartTop(compact: boolean): number {
+  return compact ? COMPACT_VERTICAL_INSET : TOP;
+}
+
+function chartBottom(compact: boolean): number {
+  return compact ? COMPACT_VERTICAL_INSET : BOTTOM;
+}
+
+function pointY(value: number, compact: boolean): number {
+  const top = chartTop(compact);
+  const bottom = chartBottom(compact);
+  return top + ((10 - value) / 20) * (HEIGHT - top - bottom);
 }
 
 function pointLabel(
@@ -116,10 +129,10 @@ export function EvaluationChart({
                 className={tick === 0 ? "chart-zero-line" : "chart-grid-line"}
                 x1={LEFT}
                 x2={WIDTH - RIGHT}
-                y1={pointY(tick)}
-                y2={pointY(tick)}
+                y1={pointY(tick, compact)}
+                y2={pointY(tick, compact)}
               />
-              <text x={LEFT - 7} y={pointY(tick) + 4} textAnchor="end">
+              <text x={LEFT - 7} y={pointY(tick, compact) + 4} textAnchor="end">
                 {tick > 0 ? `+${tick}` : tick}
               </text>
             </g>
@@ -129,7 +142,7 @@ export function EvaluationChart({
               className="evaluation-line"
               key={segment.map((point) => point.positionIndex).join("-")}
               d={segment.map((point, index) => (
-                `${index === 0 ? "M" : "L"}${pointX(point.positionIndex, positionCount)} ${pointY(point.value)}`
+                `${index === 0 ? "M" : "L"}${pointX(point.positionIndex, positionCount)} ${pointY(point.value, compact)}`
               )).join(" ")}
             />
           ))}
@@ -139,8 +152,8 @@ export function EvaluationChart({
               className="chart-selection-line"
               x1={pointX(selectedPoint.positionIndex, positionCount)}
               x2={pointX(selectedPoint.positionIndex, positionCount)}
-              y1={TOP}
-              y2={HEIGHT - BOTTOM}
+              y1={chartTop(compact)}
+              y2={HEIGHT - chartBottom(compact)}
             />
           ) : null}
           {points.map((point) => {
@@ -161,7 +174,7 @@ export function EvaluationChart({
                 <circle
                   className="evaluation-point-hit"
                   cx={pointX(point.positionIndex, positionCount)}
-                  cy={pointY(point.value)}
+                  cy={pointY(point.value, compact)}
                   r={1}
                   fill="transparent"
                   stroke="transparent"
@@ -174,7 +187,7 @@ export function EvaluationChart({
                     aria-hidden="true"
                     className="chart-selection-ring"
                     cx={pointX(point.positionIndex, positionCount)}
-                    cy={pointY(point.value)}
+                    cy={pointY(point.value, compact)}
                     r={12}
                     pointerEvents="none"
                   />
@@ -183,7 +196,7 @@ export function EvaluationChart({
                   aria-hidden="true"
                   className={`evaluation-point ${rating ? `rating-${rating.classification}` : "chart-neutral"}${selected ? " selected-chart-point" : ""}`}
                   cx={pointX(point.positionIndex, positionCount)}
-                  cy={pointY(point.value)}
+                  cy={pointY(point.value, compact)}
                   r={selected ? 8 : 7}
                   pointerEvents="none"
                 />
@@ -191,7 +204,7 @@ export function EvaluationChart({
                   <g
                     aria-hidden="true"
                     className={`chart-rating-glyph rating-tone-${rating.classification}`}
-                    transform={`translate(${pointX(point.positionIndex, positionCount) - 5} ${pointY(point.value) - 5}) scale(.4167)`}
+                    transform={`translate(${pointX(point.positionIndex, positionCount) - 5} ${pointY(point.value, compact) - 5}) scale(.4167)`}
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2.4"
