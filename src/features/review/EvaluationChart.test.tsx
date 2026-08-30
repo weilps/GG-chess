@@ -72,7 +72,7 @@ describe("EvaluationChart", () => {
     expect(screen.queryByRole("button", { name: /Position/ })).not.toBeInTheDocument();
   });
 
-  it("uses the full compact chart width for extreme evaluations", () => {
+  it("keeps extreme compact chart targets inside the clipped card", () => {
     render(
       <EvaluationChart
         compact
@@ -95,15 +95,24 @@ describe("EvaluationChart", () => {
       .querySelector(".evaluation-point-hit");
     expect(firstHitTarget).toHaveAttribute("cx", "34");
     expect(firstHitTarget).toHaveAttribute("cy", "45");
-    expect(lastHitTarget).toHaveAttribute("cx", "708");
+    expect(lastHitTarget).toHaveAttribute("cx", "686");
     expect(lastHitTarget).toHaveAttribute("cy", "145");
 
     const chart = document.querySelector<SVGSVGElement>(".evaluation-chart");
-    const viewBoxHeight = Number(chart?.getAttribute("viewBox")?.split(" ")[3]);
+    const [, , viewBoxWidth, viewBoxHeight] = chart?.getAttribute("viewBox")?.split(" ").map(Number) ?? [];
+    const compactCardWidthAt360 = 344;
+    const compactCardPadding = 10;
+    const compactChartWidthAt360 = compactCardWidthAt360 - compactCardPadding * 2;
     const compactChartHeight = 96;
     const hitRadius = 22;
+    const firstScreenX = compactCardPadding
+      + Number(firstHitTarget?.getAttribute("cx")) / viewBoxWidth * compactChartWidthAt360;
+    const lastScreenX = compactCardPadding
+      + (viewBoxWidth - Number(lastHitTarget?.getAttribute("cx"))) / viewBoxWidth * compactChartWidthAt360;
     const firstScreenY = Number(firstHitTarget?.getAttribute("cy")) / viewBoxHeight * compactChartHeight;
     const lastScreenY = Number(lastHitTarget?.getAttribute("cy")) / viewBoxHeight * compactChartHeight;
+    expect(firstScreenX).toBeGreaterThanOrEqual(hitRadius);
+    expect(lastScreenX).toBeGreaterThanOrEqual(hitRadius);
     expect(firstScreenY).toBeGreaterThanOrEqual(hitRadius);
     expect(compactChartHeight - lastScreenY).toBeGreaterThanOrEqual(hitRadius);
   });

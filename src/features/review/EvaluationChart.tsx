@@ -18,11 +18,18 @@ const BOTTOM = 24;
 // The compact SVG is 96px high. A 45-unit inset keeps the 44px hit stroke
 // fully inside its 190-unit viewBox, including at the evaluation extremes.
 const COMPACT_VERTICAL_INSET = 45;
+// The compact card contributes 10px of padding on each side. Matching the
+// 34-unit left inset on the right keeps the 44px hit stroke clear at 320px+.
+const COMPACT_RIGHT = 34;
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 
-function pointX(positionIndex: number, positionCount: number): number {
-  return LEFT + (positionIndex / Math.max(1, positionCount - 1)) * (WIDTH - LEFT - RIGHT);
+function chartRight(compact: boolean): number {
+  return compact ? COMPACT_RIGHT : RIGHT;
+}
+
+function pointX(positionIndex: number, positionCount: number, compact: boolean): number {
+  return LEFT + (positionIndex / Math.max(1, positionCount - 1)) * (WIDTH - LEFT - chartRight(compact));
 }
 
 function chartTop(compact: boolean): number {
@@ -128,7 +135,7 @@ export function EvaluationChart({
               <line
                 className={tick === 0 ? "chart-zero-line" : "chart-grid-line"}
                 x1={LEFT}
-                x2={WIDTH - RIGHT}
+                x2={WIDTH - chartRight(compact)}
                 y1={pointY(tick, compact)}
                 y2={pointY(tick, compact)}
               />
@@ -142,7 +149,7 @@ export function EvaluationChart({
               className="evaluation-line"
               key={segment.map((point) => point.positionIndex).join("-")}
               d={segment.map((point, index) => (
-                `${index === 0 ? "M" : "L"}${pointX(point.positionIndex, positionCount)} ${pointY(point.value, compact)}`
+                `${index === 0 ? "M" : "L"}${pointX(point.positionIndex, positionCount, compact)} ${pointY(point.value, compact)}`
               )).join(" ")}
             />
           ))}
@@ -150,8 +157,8 @@ export function EvaluationChart({
             <line
               aria-hidden="true"
               className="chart-selection-line"
-              x1={pointX(selectedPoint.positionIndex, positionCount)}
-              x2={pointX(selectedPoint.positionIndex, positionCount)}
+              x1={pointX(selectedPoint.positionIndex, positionCount, compact)}
+              x2={pointX(selectedPoint.positionIndex, positionCount, compact)}
               y1={chartTop(compact)}
               y2={HEIGHT - chartBottom(compact)}
             />
@@ -173,7 +180,7 @@ export function EvaluationChart({
               >
                 <circle
                   className="evaluation-point-hit"
-                  cx={pointX(point.positionIndex, positionCount)}
+                  cx={pointX(point.positionIndex, positionCount, compact)}
                   cy={pointY(point.value, compact)}
                   r={1}
                   fill="transparent"
@@ -186,7 +193,7 @@ export function EvaluationChart({
                   <circle
                     aria-hidden="true"
                     className="chart-selection-ring"
-                    cx={pointX(point.positionIndex, positionCount)}
+                    cx={pointX(point.positionIndex, positionCount, compact)}
                     cy={pointY(point.value, compact)}
                     r={12}
                     pointerEvents="none"
@@ -195,7 +202,7 @@ export function EvaluationChart({
                 <circle
                   aria-hidden="true"
                   className={`evaluation-point ${rating ? `rating-${rating.classification}` : "chart-neutral"}${selected ? " selected-chart-point" : ""}`}
-                  cx={pointX(point.positionIndex, positionCount)}
+                  cx={pointX(point.positionIndex, positionCount, compact)}
                   cy={pointY(point.value, compact)}
                   r={selected ? 8 : 7}
                   pointerEvents="none"
@@ -204,7 +211,7 @@ export function EvaluationChart({
                   <g
                     aria-hidden="true"
                     className={`chart-rating-glyph rating-tone-${rating.classification}`}
-                    transform={`translate(${pointX(point.positionIndex, positionCount) - 5} ${pointY(point.value, compact) - 5}) scale(.4167)`}
+                    transform={`translate(${pointX(point.positionIndex, positionCount, compact) - 5} ${pointY(point.value, compact) - 5}) scale(.4167)`}
                     fill="none"
                     stroke="currentColor"
                     strokeWidth="2.4"
