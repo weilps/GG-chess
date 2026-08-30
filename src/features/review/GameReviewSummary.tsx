@@ -1,7 +1,7 @@
 import type { TranslationKey } from "../../i18n/translations";
-import type { GameAccuracy, MoveClassification } from "../../types";
+import type { MoveClassification } from "../../types";
 import { formatCentipawnLoss } from "../classification/classifyMoves";
-import { AccuracySummary, MoveRatingBadge } from "../classification/MoveRatings";
+import { MoveRatingBadge } from "../classification/MoveRatings";
 import { RatingIcon } from "../classification/RatingIcon";
 import { ratingLabel } from "../classification/ratingPresentation";
 import {
@@ -14,12 +14,10 @@ type Translate = (key: TranslationKey, variables?: Record<string, string | numbe
 
 export function GameReviewSummary({
   ratings,
-  accuracy,
   onSelectPosition,
   t,
 }: {
   ratings: MoveClassification[];
-  accuracy: GameAccuracy;
   onSelectPosition: (positionIndex: number) => void;
   t: Translate;
 }) {
@@ -28,9 +26,6 @@ export function GameReviewSummary({
 
   return (
     <section className="game-review-summary" aria-label={t("gameReviewSummary")}>
-      <div className="summary-accuracy">
-        <AccuracySummary accuracy={accuracy} t={t} />
-      </div>
       <div className="classification-breakdown">
         <div className="game-review-heading">
           <strong>{t("classificationBreakdown")}</strong>

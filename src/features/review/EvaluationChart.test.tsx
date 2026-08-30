@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
 import type { MoveClassification, PositionEvaluation } from "../../types";
@@ -20,7 +20,7 @@ const ratings: MoveClassification[] = [{
 }];
 
 describe("EvaluationChart", () => {
-  it("navigates from accessible graph points with click and keyboard", () => {
+  it("navigates from accessible graph points with click and keyboard", async () => {
     const onSelectPosition = vi.fn();
     render(
       <EvaluationChart
@@ -39,13 +39,20 @@ describe("EvaluationChart", () => {
     });
     fireEvent.click(movePoint);
     fireEvent.keyDown(movePoint, { key: "Enter" });
+    movePoint.focus();
+    fireEvent.keyDown(movePoint, { key: "ArrowLeft" });
     expect(onSelectPosition).toHaveBeenNthCalledWith(1, 1);
     expect(onSelectPosition).toHaveBeenNthCalledWith(2, 1);
-    expect(screen.getByRole("button", { name: /Starting position/ })).toHaveAttribute("aria-current", "true");
-    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("stroke-width", "44");
-    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("vector-effect", "non-scaling-stroke");
+    expect(onSelectPosition).toHaveBeenNthCalledWith(3, 0);
+    const startingPoint = screen.getByRole("button", { name: /Starting position/ });
+    expect(startingPoint).toHaveAttribute("aria-current", "true");
+    await waitFor(() => expect(startingPoint).toHaveFocus());
+    expect(movePoint.tagName).toBe("BUTTON");
+    expect(document.querySelector(".evaluation-chart")).toHaveAttribute("preserveAspectRatio", "none");
     expect(screen.getByText("Best")).toBeInTheDocument();
     expect(movePoint.querySelector(".chart-rating-glyph")).toBeInTheDocument();
+    expect(document.querySelector(".chart-selection-line")).toBeInTheDocument();
+    expect(document.querySelector(".chart-selection-ring")).toBeInTheDocument();
     expect(document.querySelector('.chart-legend-icon [data-rating-icon="best"]')).toBeInTheDocument();
   });
 
@@ -65,7 +72,7 @@ describe("EvaluationChart", () => {
     expect(screen.queryByRole("button", { name: /Position/ })).not.toBeInTheDocument();
   });
 
-  it("keeps compact extreme hit targets inside the clipped chart bounds", () => {
+  it("keeps extreme compact chart targets inside the clipped card", () => {
     render(
       <EvaluationChart
         compact
@@ -82,13 +89,77 @@ describe("EvaluationChart", () => {
       />,
     );
 
-    const firstHitTarget = screen.getByRole("button", { name: /Starting position/ })
-      .querySelector(".evaluation-point-hit");
-    const lastHitTarget = screen.getByRole("button", { name: /Position 1/ })
-      .querySelector(".evaluation-point-hit");
-    expect(firstHitTarget).toHaveAttribute("cx", "64");
-    expect(firstHitTarget).toHaveAttribute("cy", "64");
-    expect(lastHitTarget).toHaveAttribute("cx", "656");
-    expect(lastHitTarget).toHaveAttribute("cy", "126");
+    const firstHitTarget = screen.getByRole("button", { name: /Starting position/ });
+    const lastHitTarget = screen.getByRole("button", { name: /Position 1/ });
+    expect(firstHitTarget).toHaveAttribute("data-chart-x", "34");
+    expect(firstHitTarget).toHaveAttribute("data-chart-y", "38");
+    expect(lastHitTarget).toHaveAttribute("data-chart-x", "686");
+    expect(lastHitTarget).toHaveAttribute("data-chart-y", "152");
+
+    const chart = document.querySelector<SVGSVGElement>(".evaluation-chart");
+    const [, , viewBoxWidth, viewBoxHeight] = chart?.getAttribute("viewBox")?.split(" ").map(Number) ?? [];
+    const compactCardWidthAt360 = 344;
+    const compactCardPadding = 10;
+    const compactChartWidthAt360 = compactCardWidthAt360 - compactCardPadding * 2;
+    const compactChartHeightAt720 = 111;
+    const hitRadius = 22;
+    const firstScreenX = compactCardPadding
+      + Number(firstHitTarget.getAttribute("data-chart-x")) / viewBoxWidth * compactChartWidthAt360;
+    const lastScreenX = compactCardPadding
+      + (viewBoxWidth - Number(lastHitTarget.getAttribute("data-chart-x"))) / viewBoxWidth * compactChartWidthAt360;
+    const firstScreenY = Number(firstHitTarget.getAttribute("data-chart-y")) / viewBoxHeight * compactChartHeightAt720;
+    const lastScreenY = Number(lastHitTarget.getAttribute("data-chart-y")) / viewBoxHeight * compactChartHeightAt720;
+    expect(firstScreenX).toBeGreaterThanOrEqual(hitRadius);
+    expect(lastScreenX).toBeGreaterThanOrEqual(hitRadius);
+    expect(firstScreenY).toBeGreaterThanOrEqual(hitRadius);
+    expect(compactChartHeightAt720 - lastScreenY).toBeGreaterThanOrEqual(hitRadius);
+    expect(chart).toHaveAttribute("preserveAspectRatio", "none");
+  });
+
+  it("selects the nearest point when 44px targets overlap in a long flat game", () => {
+    const onSelectPosition = vi.fn();
+    const positionCount = 81;
+    const flatEvaluations = Array.from({ length: positionCount }, (_, positionIndex) => ({
+      ...evaluations[0],
+      positionIndex,
+      scoreCp: 0,
+    }));
+    const longMoves = Array.from({ length: positionCount - 1 }, (_, index) => `move-${index + 1}`);
+    render(
+      <EvaluationChart
+        compact
+        evaluations={flatEvaluations}
+        ratings={[]}
+        moves={longMoves}
+        gameResult="1/2-1/2"
+        selectedPositionIndex={0}
+        onSelectPosition={onSelectPosition}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    const stage = screen.getByRole("group", { name: /interactive evaluation graph/i });
+    vi.spyOn(stage, "getBoundingClientRect").mockReturnValue({
+      left: 10,
+      top: 20,
+      width: 541,
+      height: 150,
+      right: 551,
+      bottom: 170,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    });
+    const targetPosition = 20;
+    const chartX = 34 + targetPosition / (positionCount - 1) * (720 - 34 - 34);
+    const chartY = 95;
+    fireEvent.click(stage, {
+      clientX: 10 + chartX / 720 * 541,
+      clientY: 20 + chartY / 190 * 150,
+    });
+
+    expect(screen.getAllByRole("button")).toHaveLength(positionCount);
+    expect(onSelectPosition).toHaveBeenCalledOnce();
+    expect(onSelectPosition).toHaveBeenCalledWith(targetPosition);
   });
 });

@@ -6,6 +6,7 @@ import type {
   AnalysisSnapshot,
   EngineInfo,
   GuidanceMode,
+  MoveNotationMode,
   MultiPv,
   PositionEvaluation,
   StoredGame,
@@ -30,6 +31,8 @@ interface EnginePanelProps {
   repository: GameRepository;
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
   onAnalysisStateChange?: (snapshot: AnalysisSnapshot) => void;
+  moveNotation?: MoveNotationMode;
+  onMoveNotationChange?: (mode: MoveNotationMode) => void;
 }
 
 function GearIcon() {
@@ -88,6 +91,8 @@ export function EnginePanel({
   repository,
   t,
   onAnalysisStateChange,
+  moveNotation = "pieces",
+  onMoveNotationChange,
 }: EnginePanelProps) {
   const [engine, setEngine] = useState<EngineInfo | null>(null);
   const [engineStatus, setEngineStatus] = useState<EngineStatus>("loading");
@@ -467,6 +472,18 @@ export function EnginePanel({
         </label>
         <small>{t("guidanceLegend")}</small>
       </fieldset>
+
+      <div className="engine-profile-row">
+        <label htmlFor={compact ? "move-notation-compact" : "move-notation"}>{t("moveNotation")}</label>
+        <select
+          id={compact ? "move-notation-compact" : "move-notation"}
+          value={moveNotation}
+          onChange={(event) => onMoveNotationChange?.(event.target.value as MoveNotationMode)}
+        >
+          <option value="pieces">{t("moveNotationPiecesSan")}</option>
+          <option value="san">{t("moveNotationSanOnly")}</option>
+        </select>
+      </div>
 
       <div className="engine-profile-row">
         <label htmlFor={compact ? "analysis-lines-compact" : "analysis-lines"}>{t("analysisLines")}</label>

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
 import { MemoryGameRepository } from "../../lib/db/gameRepository";
@@ -136,6 +136,40 @@ describe("ReviewScreen", () => {
     expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel", { name: "Summary" })).toBeInTheDocument();
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent("start");
+  });
+
+  it("defaults to local piece SVGs and persists SAN-only notation from Settings", async () => {
+    const notationRepository = new MemoryGameRepository();
+    const view = render(
+      <ReviewScreen
+        game={game}
+        repository={notationRepository}
+        language="en"
+        onBack={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    expect(screen.getByTestId("move-piece-e4")).toHaveAttribute("data-piece", "pawn");
+    expect(screen.getByTestId("move-piece-Nf3")).toHaveAttribute("data-piece", "knight");
+    fireEvent.click(screen.getByRole("button", { name: "Settings" }));
+    fireEvent.change(await screen.findByRole("combobox", { name: "Move notation" }), {
+      target: { value: "san" },
+    });
+    expect(screen.queryByTestId("move-piece-e4")).not.toBeInTheDocument();
+    await waitFor(async () => expect(await notationRepository.getSetting("moveNotation")).toBe("san"));
+
+    view.unmount();
+    render(
+      <ReviewScreen
+        game={game}
+        repository={notationRepository}
+        language="en"
+        onBack={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+    await waitFor(() => expect(screen.queryByTestId("move-piece-e4")).not.toBeInTheDocument());
   });
 
   it("keeps language and secondary destinations available in the review header", () => {

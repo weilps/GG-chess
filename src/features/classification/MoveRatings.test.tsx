@@ -33,6 +33,6 @@ describe("MoveRatings", () => {
     expect(screen.getByText("87.0")).toBeInTheDocument();
     expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("Brilliant");
     expect(screen.getByTestId("selected-move-rating")).toHaveTextContent("0 cp");
-    expect(screen.getByText("Independent local formula")).toBeInTheDocument();
+    expect(screen.queryByText("Independent local formula")).not.toBeInTheDocument();
   });
 });
