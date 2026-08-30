@@ -131,6 +131,14 @@ function candidateMove(chess: Chess, uci: string | null): Move | null {
   }
 }
 
+function materialCentipawns(chess: Chess, mover: Color): number {
+  return chess.board().flat().reduce((balance, piece) => {
+    if (!piece || piece.type === "k") return balance;
+    const value = PIECE_VALUE[piece.type] * 100;
+    return balance + (piece.color === mover ? value : -value);
+  }, 0);
+}
+
 function unratedCandidate(
   variation: RankedVariation,
   uci: string | null,
@@ -155,8 +163,10 @@ export function classifyCandidateVariations(
   gameResult: string,
 ): CandidateMoveClassification[] {
   let moverSign: 1 | -1;
+  let moverColor: Color;
   try {
-    moverSign = new Chess(fen).turn() === WHITE ? 1 : -1;
+    moverColor = new Chess(fen).turn();
+    moverSign = moverColor === WHITE ? 1 : -1;
   } catch {
     return evaluation.variations.map((variation) => (
       unratedCandidate(variation, variation.bestMove ?? variation.pv[0] ?? null, "invalidMove")
@@ -184,6 +194,7 @@ export function classifyCandidateVariations(
     } catch {
       return unratedCandidate(variation, uci, "invalidMove");
     }
+    const materialBefore = materialCentipawns(chess, moverColor);
     const move = candidateMove(chess, uci);
     if (!move) return unratedCandidate(variation, uci, "invalidMove");
 
@@ -198,7 +209,12 @@ export function classifyCandidateVariations(
       isSoundSacrifice: isBestMove
         && offersSoundMaterial(move, chess.fen(), candidateMover),
       foundMate: isBestMove && candidateIsMate,
-      recoveredPosition: bestMover <= -150 && candidateMover >= -50,
+      // A root score already includes its best move, so it cannot express a
+      // before/after recovery by itself. Material before and after the stored
+      // root move supplies the same deterministic recovery fact without a
+      // second engine analysis.
+      recoveredPosition: materialBefore <= -150
+        && materialCentipawns(chess, moverColor) >= -50,
       missedWin: (bestMover >= 250 || bestIsMate) && candidateMover < 75 && !candidateIsMate,
     });
     return {

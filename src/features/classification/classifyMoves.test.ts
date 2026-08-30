@@ -201,6 +201,15 @@ describe("classifyCandidateVariations", () => {
     expect(classifyCandidateVariations(mateFen, mate, "1-0")[0].classification).toBe("great");
   });
 
+  it("marks a best material recovery Great without another engine score", () => {
+    const recoveryFen = "r3k2q/8/8/8/8/8/8/Q3K3 w - - 0 1";
+    const recovery = candidateEvaluation(recoveryFen, [candidate(1, "a1a8", 0)]).evaluation;
+    expect(classifyCandidateVariations(recoveryFen, recovery, "1-0")[0]).toMatchObject({
+      classification: "great",
+      reason: "greatRecovery",
+    });
+  });
+
   it("returns explicit unrated candidates for missing scores and invalid roots", () => {
     const root = candidateEvaluation(new Chess().fen(), [
       candidate(1, "e2e4", 20),
