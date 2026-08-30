@@ -81,9 +81,9 @@ describe("board guidance", () => {
       enabled: true,
       engineStatus: "ready",
       evaluations: [evaluation(1, [
-        variation(1, "c7c5", 90),
-        variation(2, "e7e5", 55),
-        variation(3, "g8f6", 20),
+        variation(1, "c7c5", -90),
+        variation(2, "e7e5", -55),
+        variation(3, "g8f6", -20),
       ])],
       game,
       loading: false,
@@ -95,9 +95,9 @@ describe("board guidance", () => {
 
     expect(plan.boardPositionIndex).toBe(1);
     expect(plan.arrows).toMatchObject([
-      { rank: 1, sourceSquare: "c7", targetSquare: "c5", evaluation: "+0.90" },
-      { rank: 2, sourceSquare: "e7", targetSquare: "e5", evaluation: "+0.55" },
-      { rank: 3, sourceSquare: "g8", targetSquare: "f6", evaluation: "+0.20" },
+      { rank: 1, sourceSquare: "c7", targetSquare: "c5", evaluation: "-0.90", classification: "best" },
+      { rank: 2, sourceSquare: "e7", targetSquare: "e5", evaluation: "-0.55", classification: "good" },
+      { rank: 3, sourceSquare: "g8", targetSquare: "f6", evaluation: "-0.20", classification: "inaccuracy" },
       { rank: null, sourceSquare: "e2", targetSquare: "e4", tone: "warning", warningSymbol: "!" },
     ]);
   });
@@ -108,8 +108,8 @@ describe("board guidance", () => {
       enabled: true,
       engineStatus: "ready",
       evaluations: [evaluation(1, [
-        variation(1, "c7c5", 90),
-        variation(2, "e7e5", 55),
+        variation(1, "c7c5", -90),
+        variation(2, "e7e5", -55),
       ])],
       game,
       loading: false,
@@ -156,8 +156,8 @@ describe("board guidance", () => {
     expect(squareCenter("a1", "white")).toEqual({ x: 50, y: 750 });
     expect(squareCenter("a1", "black")).toEqual({ x: 750, y: 50 });
     const arrows = [
-      { key: "one", sourceSquare: "a1", targetSquare: "a8", tone: "ranked" as const, rank: 1 as const, evaluation: "+1.95", played: false, warningSymbol: null },
-      { key: "two", sourceSquare: "b1", targetSquare: "a8", tone: "ranked" as const, rank: 2 as const, evaluation: "+1.20", played: false, warningSymbol: null },
+      { key: "one", sourceSquare: "a1", targetSquare: "a8", tone: "ranked" as const, rank: 1 as const, evaluation: "+1.95", played: false, warningSymbol: null, classification: "best" as const, classificationReason: "engineBest" as const, centipawnLoss: 0 },
+      { key: "two", sourceSquare: "b1", targetSquare: "a8", tone: "ranked" as const, rank: 2 as const, evaluation: "+1.20", played: false, warningSymbol: null, classification: "good" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 75 },
     ];
     render(<BoardGuidanceOverlay arrows={arrows} orientation="black" t={t} />);
 
@@ -176,10 +176,10 @@ describe("board guidance", () => {
     "keeps four shared edge-destination labels separate when oriented %s",
     (orientation) => {
       const arrows = [
-        { key: "one", sourceSquare: "a1", targetSquare: "a8", tone: "ranked" as const, rank: 1 as const, evaluation: "+1.95", played: false, warningSymbol: null },
-        { key: "two", sourceSquare: "b1", targetSquare: "a8", tone: "ranked" as const, rank: 2 as const, evaluation: "+1.20", played: false, warningSymbol: null },
-        { key: "three", sourceSquare: "c1", targetSquare: "a8", tone: "ranked" as const, rank: 3 as const, evaluation: "+0.80", played: false, warningSymbol: null },
-        { key: "played", sourceSquare: "d1", targetSquare: "a8", tone: "blunder" as const, rank: null, evaluation: null, played: true, warningSymbol: "!!" as const },
+        { key: "one", sourceSquare: "a1", targetSquare: "a8", tone: "ranked" as const, rank: 1 as const, evaluation: "+1.95", played: false, warningSymbol: null, classification: "best" as const, classificationReason: "engineBest" as const, centipawnLoss: 0 },
+        { key: "two", sourceSquare: "b1", targetSquare: "a8", tone: "ranked" as const, rank: 2 as const, evaluation: "+1.20", played: false, warningSymbol: null, classification: "good" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 75 },
+        { key: "three", sourceSquare: "c1", targetSquare: "a8", tone: "ranked" as const, rank: 3 as const, evaluation: "+0.80", played: false, warningSymbol: null, classification: "mistake" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 115 },
+        { key: "played", sourceSquare: "d1", targetSquare: "a8", tone: "blunder" as const, rank: null, evaluation: null, played: true, warningSymbol: "!!" as const, classification: "blunder" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 300 },
       ];
       render(<BoardGuidanceOverlay arrows={arrows} orientation={orientation} t={t} />);
 

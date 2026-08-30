@@ -4,7 +4,8 @@ import type {
   MoveClassification,
 } from "../../types";
 import { formatCentipawnLoss } from "./classifyMoves";
-import { RATING_REASON_KEYS, RATING_SYMBOLS, ratingLabel } from "./ratingPresentation";
+import { RatingIcon } from "./RatingIcon";
+import { RATING_REASON_KEYS, ratingLabel } from "./ratingPresentation";
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 
@@ -16,7 +17,7 @@ export function MoveRatingBadge({ rating, t }: { rating: MoveClassification; t: 
       title={label}
       aria-label={label}
     >
-      {RATING_SYMBOLS[rating.classification]}
+      <RatingIcon classification={rating.classification} decorative />
     </span>
   );
 }

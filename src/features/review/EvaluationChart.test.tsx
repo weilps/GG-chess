@@ -35,7 +35,7 @@ describe("EvaluationChart", () => {
     );
 
     const movePoint = screen.getByRole("button", {
-      name: "Position 1, after e4, evaluation +0.50",
+      name: "Position 1, after e4, evaluation +0.50, Best",
     });
     fireEvent.click(movePoint);
     fireEvent.keyDown(movePoint, { key: "Enter" });
@@ -45,6 +45,8 @@ describe("EvaluationChart", () => {
     expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("stroke-width", "44");
     expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("vector-effect", "non-scaling-stroke");
     expect(screen.getByText("Best")).toBeInTheDocument();
+    expect(movePoint.querySelector(".chart-rating-glyph")).toBeInTheDocument();
+    expect(document.querySelector('.chart-legend-icon [data-rating-icon="best"]')).toBeInTheDocument();
   });
 
   it("renders a localized empty state without inventing points", () => {

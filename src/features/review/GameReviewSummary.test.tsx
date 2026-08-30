@@ -23,6 +23,7 @@ describe("GameReviewSummary", () => {
     );
     expect(screen.getByText("71.2")).toBeInTheDocument();
     expect(screen.getByTestId("classification-white-blunder")).toHaveTextContent("1");
+    expect(screen.getByTestId("classification-white-blunder").querySelector('[data-rating-icon="blunder"]')).toBeInTheDocument();
     expect(screen.getByTestId("classification-black-mistake")).toHaveTextContent("1");
     expect(screen.getByTestId("not-rated-white")).toHaveTextContent("1 not rated");
 

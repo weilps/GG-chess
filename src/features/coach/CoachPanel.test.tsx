@@ -62,7 +62,8 @@ describe("CoachPanel", () => {
     render(<CoachPanel insight={insight} repository={new MemoryGameRepository()} codexAvailable={false} t={(key, variables) => translate("en", key, variables)} />);
     const panel = screen.getByRole("region", { name: "Coach" });
     expect(panel).toHaveTextContent("Inaccuracy");
-    expect(screen.getByTestId("coach-rating-headline")).toHaveTextContent("?!Inaccuracy·-1.50");
+    expect(screen.getByTestId("coach-rating-headline")).toHaveTextContent("Inaccuracy·-1.50");
+    expect(screen.getByTestId("coach-rating-headline").querySelector('[data-rating-icon="inaccuracy"]')).toBeInTheDocument();
     expect(panel).toHaveTextContent("Played e5");
     expect(panel).toHaveTextContent("-0.50");
     expect(panel).toHaveTextContent("-1.50");
