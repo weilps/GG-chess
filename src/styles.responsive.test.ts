@@ -18,4 +18,13 @@ describe("responsive review styles", () => {
     expect(styles).toMatch(/\.engine-profile-row select \{[^}]*min-height: 44px;/);
     expect(styles).toMatch(/\.guidance-mode-control select \{[^}]*min-height: 44px;/);
   });
+
+  it("keeps chart points fixed at 44px while the plot stretches", () => {
+    expect(styles).toMatch(/\.evaluation-point-target \{[^}]*width: 44px;[^}]*height: 44px;/);
+    expect(styles).toMatch(/\.evaluation-chart \{[^}]*width: 100%;[^}]*height: 100%;/);
+    expect(styles).toContain("height: clamp(150px, 18dvh, 180px)");
+    expect(styles).toContain(
+      "width: min(100%, calc(100dvh - 144px - clamp(150px, 18dvh, 180px)))",
+    );
+  });
 });

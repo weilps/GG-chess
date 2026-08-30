@@ -278,40 +278,32 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .selected-move-summary .selected-rating { margin-top: 0; }
 .evaluation-chart-card, .coach-panel, .game-review-summary { margin-top: 18px; border: 0; border-radius: 14px; background: rgba(251, 252, 248, .94); }
 .evaluation-chart-card { padding: 16px 18px 12px; }
-.evaluation-chart-card.compact { height: 132px; display: grid; grid-template-rows: 25px minmax(0, 1fr); gap: 2px; overflow: hidden; margin-top: 0; padding: 7px 10px 5px; }
+.evaluation-chart-card.compact { height: clamp(150px, 18dvh, 180px); display: grid; grid-template-rows: 25px minmax(0, 1fr); gap: 2px; overflow: hidden; margin-top: 0; padding: 7px 10px 5px; }
 .evaluation-chart-card.compact .game-review-heading { align-items: center; }
 .evaluation-chart-card.compact .game-review-heading .eyebrow,
 .evaluation-chart-card.compact .game-review-heading > small,
 .evaluation-chart-card.compact .chart-legend { display: none; }
 .evaluation-chart-card.compact .game-review-heading strong { font-size: 13px; }
-.evaluation-chart-card.compact .evaluation-chart { width: 100%; height: 96px; min-height: 0; margin: 0; }
+.evaluation-chart-card.compact .evaluation-chart-stage { height: 100%; min-height: 0; margin: 0; }
 .evaluation-chart-card.compact .game-review-empty { margin: 0; font-size: 10px; }
 .game-review-heading { display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
 .game-review-heading > div { display: flex; flex-direction: column; gap: 3px; }
 .game-review-heading strong { color: #30483b; font-family: Georgia, serif; font-size: 16px; }
 .game-review-heading small { color: #89918b; font-size: 10px; }
-.evaluation-chart { width: 100%; min-height: 150px; display: block; margin-top: 8px; overflow: visible; }
-.evaluation-chart text { fill: #89918b; font: 10px "Segoe UI", sans-serif; }
-.chart-grid-line { stroke: #e4e7e0; stroke-width: 1; }
-.chart-zero-line { stroke: #aeb7ae; stroke-width: 1.4; stroke-dasharray: 5 4; }
-.evaluation-line { fill: none; stroke: #6d8074; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
-.chart-selection-line { stroke: #476c5a; stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .72; }
-.chart-selection-ring { fill: rgba(255, 255, 255, .78); stroke: #294838; stroke-width: 2; }
-.evaluation-point-target { cursor: pointer; outline: none; }
-.evaluation-point { fill: #7c8880; stroke: #fff; stroke-width: 2; transition: r .12s ease; }
-.evaluation-point-target:hover .evaluation-point, .evaluation-point-target:focus-visible .evaluation-point { stroke: #d6a64a; stroke-width: 3; }
-.evaluation-point.selected-chart-point { stroke: #294838; stroke-width: 3; }
-.evaluation-chart .rating-brilliant { fill: var(--rating-brilliant-bg); }
-.evaluation-chart .rating-great { fill: var(--rating-great-bg); }
-.evaluation-chart .rating-best { fill: var(--rating-best-bg); }
-.evaluation-chart .rating-excellent { fill: var(--rating-excellent-bg); }
-.evaluation-chart .rating-good { fill: var(--rating-good-bg); }
-.evaluation-chart .rating-inaccuracy { fill: var(--rating-inaccuracy-bg); }
-.evaluation-chart .rating-mistake { fill: var(--rating-mistake-bg); }
-.evaluation-chart .rating-miss { fill: var(--rating-miss-bg); }
-.evaluation-chart .rating-blunder { fill: var(--rating-blunder-bg); }
-.evaluation-chart .rating-notRated { fill: var(--rating-not-rated-bg); }
-.chart-rating-glyph { vector-effect: non-scaling-stroke; }
+.evaluation-chart-stage { position: relative; width: 100%; min-height: 150px; margin-top: 8px; }
+.evaluation-chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.chart-grid-line { stroke: #e4e7e0; stroke-width: 1; vector-effect: non-scaling-stroke; }
+.chart-zero-line { stroke: #aeb7ae; stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
+.evaluation-line { fill: none; stroke: #6d8074; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.chart-selection-line { stroke: #476c5a; stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .72; vector-effect: non-scaling-stroke; }
+.chart-axis-label { position: absolute; z-index: 1; padding-right: 4px; color: #89918b; font-size: 10px; line-height: 1; pointer-events: none; transform: translate(-100%, -50%); }
+.evaluation-point-target { position: absolute; z-index: 2; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; transform: translate(-50%, -50%); }
+.chart-selection-ring { position: absolute; width: 24px; height: 24px; border: 2px solid #294838; border-radius: 50%; background: rgba(255, 255, 255, .78); }
+.evaluation-point { position: relative; width: 14px; height: 14px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; color: #fff; background: #7c8880; transition: width .12s ease, height .12s ease, border-color .12s ease; }
+.evaluation-point.chart-neutral { color: #fff; background: #7c8880; }
+.evaluation-point-target:hover .evaluation-point, .evaluation-point-target:focus-visible .evaluation-point { border-color: #d6a64a; border-width: 3px; }
+.evaluation-point.selected-chart-point { width: 16px; height: 16px; border-color: #294838; border-width: 3px; }
+.chart-rating-glyph { width: 10px; height: 10px; }
 .rating-tone-brilliant { color: var(--rating-brilliant-fg); }
 .rating-tone-great { color: var(--rating-great-fg); }
 .rating-tone-best { color: var(--rating-best-fg); }
@@ -470,9 +462,9 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
   .review-page { height: 100dvh; min-height: 0; overflow: hidden; }
   .review-header { height: 56px; min-height: 56px; }
   .review-workspace { width: 100%; max-width: none; height: calc(100dvh - 56px); padding: 10px 16px 12px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; align-items: stretch; }
-  .board-column { min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 44px 132px; gap: 8px; }
+  .board-column { min-height: 0; height: 100%; display: grid; grid-template-rows: minmax(0, 1fr) 44px clamp(150px, 18dvh, 180px); gap: 8px; }
   .board-stage { min-height: 0; height: 100%; justify-content: start; }
-  .board-frame { --board-padding: 8px; width: min(100%, calc(100dvh - 270px)); align-self: center; }
+  .board-frame { --board-padding: 8px; width: min(100%, calc(100dvh - 144px - clamp(150px, 18dvh, 180px))); align-self: center; }
   .position-controls { margin-top: 0; }
   .evaluation-chart-card.compact { margin-top: 0; }
   .review-sidebar { min-height: 0; height: 100%; grid-template-rows: minmax(0, .82fr) minmax(0, 1.18fr); gap: 10px; }

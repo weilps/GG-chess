@@ -47,8 +47,8 @@ describe("EvaluationChart", () => {
     const startingPoint = screen.getByRole("button", { name: /Starting position/ });
     expect(startingPoint).toHaveAttribute("aria-current", "true");
     await waitFor(() => expect(startingPoint).toHaveFocus());
-    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("stroke-width", "44");
-    expect(movePoint.querySelector(".evaluation-point-hit")).toHaveAttribute("vector-effect", "non-scaling-stroke");
+    expect(movePoint.tagName).toBe("BUTTON");
+    expect(document.querySelector(".evaluation-chart")).toHaveAttribute("preserveAspectRatio", "none");
     expect(screen.getByText("Best")).toBeInTheDocument();
     expect(movePoint.querySelector(".chart-rating-glyph")).toBeInTheDocument();
     expect(document.querySelector(".chart-selection-line")).toBeInTheDocument();
@@ -89,31 +89,30 @@ describe("EvaluationChart", () => {
       />,
     );
 
-    const firstHitTarget = screen.getByRole("button", { name: /Starting position/ })
-      .querySelector(".evaluation-point-hit");
-    const lastHitTarget = screen.getByRole("button", { name: /Position 1/ })
-      .querySelector(".evaluation-point-hit");
-    expect(firstHitTarget).toHaveAttribute("cx", "34");
-    expect(firstHitTarget).toHaveAttribute("cy", "45");
-    expect(lastHitTarget).toHaveAttribute("cx", "686");
-    expect(lastHitTarget).toHaveAttribute("cy", "145");
+    const firstHitTarget = screen.getByRole("button", { name: /Starting position/ });
+    const lastHitTarget = screen.getByRole("button", { name: /Position 1/ });
+    expect(firstHitTarget).toHaveAttribute("data-chart-x", "34");
+    expect(firstHitTarget).toHaveAttribute("data-chart-y", "38");
+    expect(lastHitTarget).toHaveAttribute("data-chart-x", "686");
+    expect(lastHitTarget).toHaveAttribute("data-chart-y", "152");
 
     const chart = document.querySelector<SVGSVGElement>(".evaluation-chart");
     const [, , viewBoxWidth, viewBoxHeight] = chart?.getAttribute("viewBox")?.split(" ").map(Number) ?? [];
     const compactCardWidthAt360 = 344;
     const compactCardPadding = 10;
     const compactChartWidthAt360 = compactCardWidthAt360 - compactCardPadding * 2;
-    const compactChartHeight = 96;
+    const compactChartHeightAt720 = 111;
     const hitRadius = 22;
     const firstScreenX = compactCardPadding
-      + Number(firstHitTarget?.getAttribute("cx")) / viewBoxWidth * compactChartWidthAt360;
+      + Number(firstHitTarget.getAttribute("data-chart-x")) / viewBoxWidth * compactChartWidthAt360;
     const lastScreenX = compactCardPadding
-      + (viewBoxWidth - Number(lastHitTarget?.getAttribute("cx"))) / viewBoxWidth * compactChartWidthAt360;
-    const firstScreenY = Number(firstHitTarget?.getAttribute("cy")) / viewBoxHeight * compactChartHeight;
-    const lastScreenY = Number(lastHitTarget?.getAttribute("cy")) / viewBoxHeight * compactChartHeight;
+      + (viewBoxWidth - Number(lastHitTarget.getAttribute("data-chart-x"))) / viewBoxWidth * compactChartWidthAt360;
+    const firstScreenY = Number(firstHitTarget.getAttribute("data-chart-y")) / viewBoxHeight * compactChartHeightAt720;
+    const lastScreenY = Number(lastHitTarget.getAttribute("data-chart-y")) / viewBoxHeight * compactChartHeightAt720;
     expect(firstScreenX).toBeGreaterThanOrEqual(hitRadius);
     expect(lastScreenX).toBeGreaterThanOrEqual(hitRadius);
     expect(firstScreenY).toBeGreaterThanOrEqual(hitRadius);
-    expect(compactChartHeight - lastScreenY).toBeGreaterThanOrEqual(hitRadius);
+    expect(compactChartHeightAt720 - lastScreenY).toBeGreaterThanOrEqual(hitRadius);
+    expect(chart).toHaveAttribute("preserveAspectRatio", "none");
   });
 });
