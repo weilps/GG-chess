@@ -5,6 +5,7 @@ import {
   buildCoachInsight,
   convertPrincipalVariation,
   formatMoverEvaluation,
+  formatWhiteEvaluation,
   uciMoveToSan,
 } from "./coachInsight";
 
@@ -88,6 +89,8 @@ describe("deterministic coach insight", () => {
     const black = rating("best", { color: "black", moveIndex: 1, positionIndex: 2 });
     expect(formatMoverEvaluation(evaluation(1, 125, null), black, "0-1")).toBe("-1.25");
     expect(formatMoverEvaluation(evaluation(1, null, null, [], -3), black, "0-1")).toBe("M3");
+    expect(formatWhiteEvaluation(evaluation(1, 125, null), "0-1")).toBe("+1.25");
+    expect(formatWhiteEvaluation(evaluation(1, null, null, [], -3), "0-1")).toBe("-M3");
   });
 
   it.each([
@@ -139,6 +142,6 @@ describe("deterministic coach insight", () => {
     const first = buildCoachInsight(game, inputRating, [evaluation(0, 0, "e2e4")]);
     const second = buildCoachInsight(game, inputRating, [evaluation(0, 0, "e2e4")]);
     expect(first).toEqual(second);
-    expect(first).toMatchObject({ before: null, after: null, tip: "analyzeAdjacent" });
+    expect(first).toMatchObject({ before: null, after: null, whiteAfter: null, tip: "analyzeAdjacent" });
   });
 });

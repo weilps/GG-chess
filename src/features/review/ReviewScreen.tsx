@@ -3,7 +3,7 @@ import { Chessboard } from "react-chessboard";
 import type { TranslationKey } from "../../i18n/translations";
 import type { GameRepository } from "../../lib/db/gameRepository";
 import type { AnalysisSnapshot, Language, StoredGame } from "../../types";
-import { buildCodexAdviceRequest } from "../adviser/codexClient";
+import { buildCodexAdviceIdentity, buildCodexAdviceRequest } from "../adviser/codexClient";
 import { calculateGameAccuracy, classifyGameMoves } from "../classification/classifyMoves";
 import { MoveRatingBadge } from "../classification/MoveRatings";
 import { CoachPanel, type CoachEmptyState } from "../coach/CoachPanel";
@@ -177,6 +177,15 @@ export function ReviewScreen({
     () => buildCodexAdviceRequest(game, coachInsight, language),
     [coachInsight, game, language],
   );
+  const codexIdentity = useMemo(
+    () => buildCodexAdviceIdentity(
+      game.fingerprint,
+      positionIndex,
+      analysisSnapshot.cacheKey,
+      codexRequest,
+    ),
+    [analysisSnapshot.cacheKey, codexRequest, game.fingerprint, positionIndex],
+  );
   const selectedEvaluation = activeEvaluations.find(
     (evaluation) => evaluation.positionIndex === guidancePlan.boardPositionIndex,
   ) ?? null;
@@ -320,7 +329,7 @@ export function ReviewScreen({
             insight={coachInsight}
             emptyState={coachEmptyState}
             codexRequest={codexRequest}
-            codexContextKey={`${analysisSnapshot.cacheKey ?? "no-cache"}:${positionIndex}:${language}:${codexRequest ? JSON.stringify(codexRequest) : "unavailable"}`}
+            codexIdentity={codexIdentity}
             repository={repository}
             t={t}
           />

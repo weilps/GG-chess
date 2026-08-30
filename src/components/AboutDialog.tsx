@@ -20,6 +20,10 @@ export function AboutDialog({ games, repository, language, onRestored, onClose, 
         <h2 id="about-title">{t("appName")}</h2>
         <p>{t("creditText")}</p>
         <a href="https://encroissant.org" target="_blank" rel="noreferrer">En Croissant</a>
+        <section className="codex-about-note" aria-labelledby="codex-about-title">
+          <h3 id="codex-about-title">{t("codexAboutTitle")}</h3>
+          <p>{t("codexAboutBody")}</p>
+        </section>
         <DataUpdatesPanel
           games={games}
           repository={repository}
