@@ -16,6 +16,7 @@ import {
 } from "./codexClient";
 
 const CONSENT_SETTING = "codexAdvisorEnabled";
+const adviceSaveQueues = new WeakMap<GameRepository, Map<string, Promise<void>>>();
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 type ConsentState = "loading" | "enabled" | "disabled";
@@ -37,6 +38,29 @@ function errorTranslation(code: string): TranslationKey {
   if (code.includes("malformed")) return "codexErrorMalformed";
   if (code.includes("storage")) return "codexErrorStorage";
   return "codexErrorExecution";
+}
+
+function saveAdviceInRequestOrder(
+  repository: GameRepository,
+  advice: StoredCodexAdvice,
+): Promise<void> {
+  let queues = adviceSaveQueues.get(repository);
+  if (!queues) {
+    queues = new Map<string, Promise<void>>();
+    adviceSaveQueues.set(repository, queues);
+  }
+
+  const key = codexAdviceIdentityKey(advice);
+  const previous = queues.get(key) ?? Promise.resolve();
+  const current = previous
+    .catch(() => undefined)
+    .then(() => repository.saveCodexAdvice(advice));
+  queues.set(key, current);
+  const clear = () => {
+    if (queues?.get(key) === current) queues.delete(key);
+  };
+  current.then(clear, clear);
+  return current;
 }
 
 export function CodexAdvisorPanel(props: CodexAdvisorPanelProps) {
@@ -148,7 +172,7 @@ function CodexAdvisorContent({
         updatedAt: new Date().toISOString(),
       };
       try {
-        await repository.saveCodexAdvice(saved);
+        await saveAdviceInRequestOrder(repository, saved);
       } catch {
         throw new Error("codex_storage_failed");
       }

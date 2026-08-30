@@ -173,31 +173,41 @@ describe("CodexAdvisorPanel", () => {
     expect(await repository.getCodexAdvice(nextIdentity)).toBeNull();
   });
 
-  it("does not let an older regeneration overwrite a newer remounted request", async () => {
+  it("serializes saves so an older remounted regeneration cannot finish last", async () => {
     const repository = new MemoryGameRepository();
     await repository.setSetting("codexAdvisorEnabled", "true");
     await repository.saveCodexAdvice(saved());
-    let resolveOlder: (value: CodexAdviceResponse) => void = () => undefined;
-    let resolveNewer: (value: CodexAdviceResponse) => void = () => undefined;
-    const older = new Promise<CodexAdviceResponse>((resolve) => { resolveOlder = resolve; });
-    const newer = new Promise<CodexAdviceResponse>((resolve) => { resolveNewer = resolve; });
+    const originalSave = repository.saveCodexAdvice.bind(repository);
+    let releaseOlderSave: () => void = () => undefined;
+    let markOlderSaveStarted: () => void = () => undefined;
+    const olderSaveGate = new Promise<void>((resolve) => { releaseOlderSave = resolve; });
+    const olderSaveStarted = new Promise<void>((resolve) => { markOlderSaveStarted = resolve; });
+    const saveSpy = vi.spyOn(repository, "saveCodexAdvice")
+      .mockImplementationOnce(async (value) => {
+        markOlderSaveStarted();
+        await olderSaveGate;
+        await originalSave(value);
+      })
+      .mockImplementation(async (value) => originalSave(value));
     const requestAdvice = vi.fn()
-      .mockImplementationOnce(() => older)
-      .mockImplementationOnce(() => newer);
+      .mockResolvedValueOnce({ ...answer, advice: { plan: "Older tactical plan." } })
+      .mockResolvedValueOnce({ ...answer, advice: { plan: "Newer tactical plan." } });
 
     const first = render(
       <CodexAdvisorPanel request={request} identity={identity} repository={repository} available requestAdvice={requestAdvice} t={en} />,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
+    await olderSaveStarted;
     first.unmount();
 
     render(
       <CodexAdvisorPanel request={request} identity={identity} repository={repository} available requestAdvice={requestAdvice} t={en} />,
     );
     fireEvent.click(await screen.findByRole("button", { name: "Regenerate" }));
-    resolveNewer({ ...answer, advice: { plan: "Newer tactical plan." } });
+    await waitFor(() => expect(requestAdvice).toHaveBeenCalledTimes(2));
+    expect(saveSpy).toHaveBeenCalledTimes(1);
+    releaseOlderSave();
     expect(await screen.findByText("Newer tactical plan.")).toBeInTheDocument();
-    resolveOlder({ ...answer, advice: { plan: "Older tactical plan." } });
     await waitFor(() => expect(repository.getCodexAdvice(identity)).resolves.toMatchObject({
       plan: "Newer tactical plan.",
     }));
