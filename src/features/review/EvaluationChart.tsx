@@ -1,4 +1,4 @@
-import type { KeyboardEvent } from "react";
+import type { KeyboardEvent, MouseEvent } from "react";
 import type { TranslationKey } from "../../i18n/translations";
 import type { MoveClassification, PositionEvaluation } from "../../types";
 import { RatingIcon } from "../classification/RatingIcon";
@@ -93,6 +93,25 @@ export function EvaluationChart({
   const ratingByPosition = new Map(ratings.map((rating) => [rating.positionIndex, rating]));
   const points = segments.flat();
   const selectedPoint = points.find((point) => point.positionIndex === selectedPositionIndex);
+  const selectNearestPoint = (event: MouseEvent<HTMLDivElement>) => {
+    // Point buttons intentionally ignore pointer hit-testing: in long games their
+    // 44px accessibility targets overlap. Route pointer clicks through the whole
+    // plot and choose the visually nearest point instead.
+    if (event.target !== event.currentTarget) return;
+    const bounds = event.currentTarget.getBoundingClientRect();
+    if (bounds.width <= 0 || bounds.height <= 0) return;
+
+    const nearest = points.reduce<{ positionIndex: number; distanceSquared: number } | null>((best, point) => {
+      const screenX = bounds.left + pointX(point.positionIndex, positionCount, compact) / WIDTH * bounds.width;
+      const screenY = bounds.top + pointY(point.value, compact) / HEIGHT * bounds.height;
+      const distanceSquared = (event.clientX - screenX) ** 2 + (event.clientY - screenY) ** 2;
+      return best === null || distanceSquared < best.distanceSquared
+        ? { positionIndex: point.positionIndex, distanceSquared }
+        : best;
+    }, null);
+
+    if (nearest) onSelectPosition(nearest.positionIndex);
+  };
   const activate = (event: KeyboardEvent<HTMLButtonElement>, positionIndex: number) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
@@ -132,6 +151,7 @@ export function EvaluationChart({
           className="evaluation-chart-stage"
           role="group"
           aria-label={t("evaluationGraphDescription")}
+          onClick={selectNearestPoint}
         >
           <svg
             aria-hidden="true"

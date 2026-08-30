@@ -115,4 +115,51 @@ describe("EvaluationChart", () => {
     expect(compactChartHeightAt720 - lastScreenY).toBeGreaterThanOrEqual(hitRadius);
     expect(chart).toHaveAttribute("preserveAspectRatio", "none");
   });
+
+  it("selects the nearest point when 44px targets overlap in a long flat game", () => {
+    const onSelectPosition = vi.fn();
+    const positionCount = 81;
+    const flatEvaluations = Array.from({ length: positionCount }, (_, positionIndex) => ({
+      ...evaluations[0],
+      positionIndex,
+      scoreCp: 0,
+    }));
+    const longMoves = Array.from({ length: positionCount - 1 }, (_, index) => `move-${index + 1}`);
+    render(
+      <EvaluationChart
+        compact
+        evaluations={flatEvaluations}
+        ratings={[]}
+        moves={longMoves}
+        gameResult="1/2-1/2"
+        selectedPositionIndex={0}
+        onSelectPosition={onSelectPosition}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    const stage = screen.getByRole("group", { name: /interactive evaluation graph/i });
+    vi.spyOn(stage, "getBoundingClientRect").mockReturnValue({
+      left: 10,
+      top: 20,
+      width: 541,
+      height: 150,
+      right: 551,
+      bottom: 170,
+      x: 10,
+      y: 20,
+      toJSON: () => ({}),
+    });
+    const targetPosition = 20;
+    const chartX = 34 + targetPosition / (positionCount - 1) * (720 - 34 - 34);
+    const chartY = 95;
+    fireEvent.click(stage, {
+      clientX: 10 + chartX / 720 * 541,
+      clientY: 20 + chartY / 190 * 150,
+    });
+
+    expect(screen.getAllByRole("button")).toHaveLength(positionCount);
+    expect(onSelectPosition).toHaveBeenCalledOnce();
+    expect(onSelectPosition).toHaveBeenCalledWith(targetPosition);
+  });
 });

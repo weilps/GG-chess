@@ -290,14 +290,14 @@ button:focus-visible, [tabindex]:focus-visible { outline: 3px solid #d6a64a; out
 .game-review-heading > div { display: flex; flex-direction: column; gap: 3px; }
 .game-review-heading strong { color: #30483b; font-family: Georgia, serif; font-size: 16px; }
 .game-review-heading small { color: #89918b; font-size: 10px; }
-.evaluation-chart-stage { position: relative; width: 100%; min-height: 150px; margin-top: 8px; }
-.evaluation-chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; }
+.evaluation-chart-stage { position: relative; width: 100%; min-height: 150px; margin-top: 8px; cursor: pointer; }
+.evaluation-chart { position: absolute; inset: 0; width: 100%; height: 100%; display: block; overflow: visible; pointer-events: none; }
 .chart-grid-line { stroke: #e4e7e0; stroke-width: 1; vector-effect: non-scaling-stroke; }
 .chart-zero-line { stroke: #aeb7ae; stroke-width: 1.4; stroke-dasharray: 5 4; vector-effect: non-scaling-stroke; }
 .evaluation-line { fill: none; stroke: #6d8074; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .chart-selection-line { stroke: #476c5a; stroke-width: 1.5; stroke-dasharray: 3 4; opacity: .72; vector-effect: non-scaling-stroke; }
 .chart-axis-label { position: absolute; z-index: 1; padding-right: 4px; color: #89918b; font-size: 10px; line-height: 1; pointer-events: none; transform: translate(-100%, -50%); }
-.evaluation-point-target { position: absolute; z-index: 2; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; transform: translate(-50%, -50%); }
+.evaluation-point-target { position: absolute; z-index: 2; width: 44px; height: 44px; display: grid; place-items: center; padding: 0; border: 0; border-radius: 50%; background: transparent; cursor: pointer; pointer-events: none; transform: translate(-50%, -50%); }
 .chart-selection-ring { position: absolute; width: 24px; height: 24px; border: 2px solid #294838; border-radius: 50%; background: rgba(255, 255, 255, .78); }
 .evaluation-point { position: relative; width: 14px; height: 14px; display: grid; place-items: center; border: 2px solid #fff; border-radius: 50%; color: #fff; background: #7c8880; transition: width .12s ease, height .12s ease, border-color .12s ease; }
 .evaluation-point.chart-neutral { color: #fff; background: #7c8880; }
