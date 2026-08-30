@@ -2,6 +2,7 @@ import Database from "@tauri-apps/plugin-sql";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { EngineInfo, ParsedGame, PositionEvaluation, StoredGame } from "../../types";
 import {
+  type CodexAdviceIdentity,
   MemoryGameRepository,
   SqliteGameRepository,
   sortGamesNewestFirst,
@@ -33,6 +34,26 @@ function evaluation(
 ): PositionEvaluation {
   const rankOne = { rank: 1 as const, scoreCp, mate: null, depth: 18, bestMove, pv };
   return { positionIndex, ...rankOne, variations: [rankOne] };
+}
+
+const adviceIdentity: CodexAdviceIdentity = {
+  gameFingerprint: "one",
+  positionIndex: 1,
+  language: "en",
+  analysisFingerprint: "analysis-one",
+  promptVersion: 2,
+  schemaVersion: 2,
+};
+
+function advice(identity: CodexAdviceIdentity = adviceIdentity, plan = "Use the open file.") {
+  return {
+    ...identity,
+    plan,
+    model: "gpt-5.6-terra",
+    reasoning: "medium",
+    durationMs: 900,
+    updatedAt: "2026-08-30T00:00:00Z",
+  };
 }
 
 describe("MemoryGameRepository", () => {
@@ -173,6 +194,34 @@ describe("MemoryGameRepository", () => {
     expect(await repository.getAnalysis("one", engine, "balanced", 3)).toEqual([]);
     expect(await repository.getAnalysis("one", engine, "balanced", 1)).toHaveLength(1);
   });
+
+  it("saves, replaces, versions, and deletes Codex Plans with their game", async () => {
+    const repository = new MemoryGameRepository();
+    await repository.addGames([game("one", null)]);
+    const french = { ...adviceIdentity, language: "fr" as const };
+    const newerPrompt = { ...adviceIdentity, promptVersion: 3 };
+
+    await repository.saveCodexAdvice(advice());
+    await repository.saveCodexAdvice(advice(french, "Occupez la colonne ouverte."));
+    await repository.saveCodexAdvice(advice(newerPrompt, "Versioned plan."));
+    await repository.saveCodexAdvice(advice(adviceIdentity, "Replace the current plan."));
+
+    expect(await repository.getCodexAdvice(adviceIdentity)).toMatchObject({
+      plan: "Replace the current plan.",
+    });
+    expect(await repository.getCodexAdvice(french)).toMatchObject({
+      plan: "Occupez la colonne ouverte.",
+    });
+    expect(await repository.getCodexAdvice(newerPrompt)).toMatchObject({
+      plan: "Versioned plan.",
+    });
+
+    await repository.deleteGame("one");
+    expect(await repository.listGames()).toEqual([]);
+    expect(await repository.getCodexAdvice(adviceIdentity)).toBeNull();
+    expect(await repository.getCodexAdvice(french)).toBeNull();
+    expect(await repository.getCodexAdvice(newerPrompt)).toBeNull();
+  });
 });
 
 describe("sortGamesNewestFirst", () => {
@@ -215,5 +264,68 @@ describe("SqliteGameRepository migrations", () => {
     ));
     expect(legacyCopies).toHaveLength(1);
     expect(settings.get("analysisStorageVersion")).toBe("2");
+  });
+
+  it("creates idempotent advice storage and replaces then cascades Plans", async () => {
+    const settings = new Map<string, string>();
+    const adviceRows = new Map<string, Record<string, unknown>>();
+    const rowKey = (values: unknown[]) => values.slice(0, 6).join("|");
+    const execute = vi.fn(async (statement: string, values: unknown[] = []) => {
+      if (statement.startsWith("INSERT INTO app_settings") && values[0] === "analysisStorageVersion") {
+        settings.set("analysisStorageVersion", String(values[1]));
+      }
+      if (statement.includes("INSERT INTO codex_advice")) {
+        adviceRows.set(rowKey(values), {
+          game_fingerprint: values[0],
+          position_index: values[1],
+          language: values[2],
+          analysis_fingerprint: values[3],
+          prompt_version: values[4],
+          schema_version: values[5],
+          plan: values[6],
+          model: values[7],
+          reasoning: values[8],
+          duration_ms: values[9],
+          updated_at: values[10],
+        });
+      }
+      if (statement.startsWith("DELETE FROM games")) adviceRows.clear();
+      return { rowsAffected: 1, lastInsertId: 0 };
+    });
+    const select = vi.fn(async (statement: string, values: unknown[] = []) => {
+      if (statement.includes("WHERE key = $1")) {
+        return settings.has("analysisStorageVersion")
+          ? [{ value: settings.get("analysisStorageVersion") }]
+          : [];
+      }
+      if (statement.includes("SELECT * FROM codex_advice")) {
+        const row = adviceRows.get(rowKey(values));
+        return row ? [row] : [];
+      }
+      return [];
+    });
+    vi.spyOn(Database, "load").mockResolvedValue({ execute, select } as unknown as Database);
+    const repository = new SqliteGameRepository();
+    await repository.initialize();
+    await repository.initialize();
+    const french = { ...adviceIdentity, language: "fr" as const };
+    const newerPrompt = { ...adviceIdentity, promptVersion: 3 };
+    await repository.saveCodexAdvice(advice());
+    await repository.saveCodexAdvice(advice(adviceIdentity, "Replacement."));
+    await repository.saveCodexAdvice(advice(french, "Plan français."));
+    await repository.saveCodexAdvice(advice(newerPrompt, "Versioned plan."));
+
+    expect(await repository.getCodexAdvice(adviceIdentity)).toMatchObject({ plan: "Replacement." });
+    expect(await repository.getCodexAdvice(french)).toMatchObject({ plan: "Plan français." });
+    expect(await repository.getCodexAdvice(newerPrompt)).toMatchObject({ plan: "Versioned plan." });
+    expect(execute.mock.calls.filter(([statement]) => (
+      String(statement).includes("CREATE TABLE IF NOT EXISTS codex_advice")
+    ))).toHaveLength(2);
+    expect(execute).toHaveBeenCalledWith("PRAGMA foreign_keys = ON");
+
+    await repository.deleteGame("one");
+    expect(await repository.getCodexAdvice(adviceIdentity)).toBeNull();
+    expect(await repository.getCodexAdvice(french)).toBeNull();
+    expect(await repository.getCodexAdvice(newerPrompt)).toBeNull();
   });
 });

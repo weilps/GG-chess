@@ -28,6 +28,7 @@ export interface CoachInsight {
   rating: MoveClassification;
   before: string | null;
   after: string | null;
+  whiteAfter: string | null;
   bestMoveSan: string | null;
   principalVariationSan: string[];
   lineStatus: CoachLineStatus;
@@ -108,6 +109,18 @@ export function formatMoverEvaluation(
   return `${pawns >= 0 ? "+" : ""}${pawns.toFixed(2)}`;
 }
 
+export function formatWhiteEvaluation(
+  evaluation: PositionEvaluation,
+  gameResult: string,
+): string {
+  const whiteCp = evaluationToWhiteCentipawns(evaluation, gameResult);
+  if (evaluation.mate !== null) {
+    return `${whiteCp < 0 ? "-" : ""}M${Math.abs(evaluation.mate)}`;
+  }
+  const pawns = whiteCp / 100;
+  return `${pawns >= 0 ? "+" : ""}${pawns.toFixed(2)}`;
+}
+
 function moverHasMate(
   evaluation: PositionEvaluation,
   rating: MoveClassification,
@@ -156,6 +169,7 @@ export function buildCoachInsight(
     rating,
     before: rated ? formatMoverEvaluation(before, rating, game.result) : null,
     after: rated ? formatMoverEvaluation(after, rating, game.result) : null,
+    whiteAfter: rated ? formatWhiteEvaluation(after, game.result) : null,
     bestMoveSan,
     principalVariationSan: line.san,
     lineStatus: line.status,

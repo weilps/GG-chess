@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { TranslationKey } from "../../i18n/translations";
-import type { GameRepository } from "../../lib/db/gameRepository";
+import type {
+  CodexAdviceIdentity,
+  GameRepository,
+  StoredCodexAdvice,
+} from "../../lib/db/gameRepository";
 import {
+  CODEX_SCHEMA_VERSION,
   codexAdviserAvailable,
+  codexAdviceIdentityKey,
   codexErrorCode,
   requestCodexAdvice,
   type CodexAdviceRequest,
@@ -13,7 +19,15 @@ const CONSENT_SETTING = "codexAdvisorEnabled";
 
 type Translate = (key: TranslationKey, variables?: Record<string, string | number>) => string;
 type ConsentState = "loading" | "enabled" | "disabled";
-export type CodexAdviceSection = "explanation" | "planPractice";
+
+interface CodexAdvisorPanelProps {
+  request: CodexAdviceRequest | null;
+  identity: CodexAdviceIdentity | null;
+  repository: GameRepository;
+  t: Translate;
+  available?: boolean;
+  requestAdvice?: (input: CodexAdviceRequest) => Promise<CodexAdviceResponse>;
+}
 
 function errorTranslation(code: string): TranslationKey {
   if (code.includes("cli_missing")) return "codexErrorMissing";
@@ -21,30 +35,27 @@ function errorTranslation(code: string): TranslationKey {
   if (code.includes("busy")) return "codexErrorBusy";
   if (code.includes("timeout")) return "codexErrorTimeout";
   if (code.includes("malformed")) return "codexErrorMalformed";
+  if (code.includes("storage")) return "codexErrorStorage";
   return "codexErrorExecution";
 }
 
-export function CodexAdvisorPanel({
+export function CodexAdvisorPanel(props: CodexAdvisorPanelProps) {
+  return <CodexAdvisorContent key={codexAdviceIdentityKey(props.identity)} {...props} />;
+}
+
+function CodexAdvisorContent({
   request,
+  identity,
   repository,
   t,
   available = codexAdviserAvailable(),
   requestAdvice = requestCodexAdvice,
-  embedded = false,
-  activeSection = "explanation",
-}: {
-  request: CodexAdviceRequest | null;
-  repository: GameRepository;
-  t: Translate;
-  available?: boolean;
-  requestAdvice?: (input: CodexAdviceRequest) => Promise<CodexAdviceResponse>;
-  embedded?: boolean;
-  activeSection?: CodexAdviceSection;
-}) {
+}: CodexAdvisorPanelProps) {
   const [consent, setConsent] = useState<ConsentState>("loading");
   const [showConsent, setShowConsent] = useState(false);
+  const [cacheLoading, setCacheLoading] = useState(Boolean(identity));
   const [loading, setLoading] = useState(false);
-  const [response, setResponse] = useState<CodexAdviceResponse | null>(null);
+  const [advice, setAdvice] = useState<StoredCodexAdvice | null>(null);
   const [errorKey, setErrorKey] = useState<TranslationKey | null>(null);
   const requestSequence = useRef(0);
 
@@ -60,39 +71,88 @@ export function CodexAdvisorPanel({
     return () => { active = false; };
   }, [repository]);
 
+  useEffect(() => {
+    const sequence = ++requestSequence.current;
+    let active = true;
+    if (!identity) {
+      return () => { active = false; };
+    }
+    repository.getCodexAdvice(identity)
+      .then((saved) => {
+        if (active && requestSequence.current === sequence) setAdvice(saved);
+      })
+      .catch(() => {
+        if (active && requestSequence.current === sequence) setErrorKey("codexErrorStorage");
+      })
+      .finally(() => {
+        if (active && requestSequence.current === sequence) setCacheLoading(false);
+    });
+    return () => { active = false; };
+  }, [identity, repository]);
+
   useEffect(() => () => {
     requestSequence.current += 1;
   }, []);
 
   const enable = useCallback(async () => {
-    await repository.setSetting(CONSENT_SETTING, "true");
-    setConsent("enabled");
-    setShowConsent(false);
+    try {
+      await repository.setSetting(CONSENT_SETTING, "true");
+      setConsent("enabled");
+      setShowConsent(false);
+    } catch {
+      setShowConsent(false);
+      setErrorKey("codexErrorStorage");
+    }
   }, [repository]);
 
   const disable = useCallback(async () => {
     requestSequence.current += 1;
-    await repository.setSetting(CONSENT_SETTING, "false");
+    setErrorKey(null);
+    try {
+      await repository.setSetting(CONSENT_SETTING, "false");
+    } catch {
+      setErrorKey("codexErrorStorage");
+    }
     setConsent("disabled");
     setShowConsent(false);
     setLoading(false);
-    setResponse(null);
-    setErrorKey(null);
+    setAdvice(null);
   }, [repository]);
 
   const ask = useCallback(async () => {
-    if (!request || !available) return;
+    if (!request || !identity || !available) return;
     if (consent !== "enabled") {
       setShowConsent(true);
       return;
     }
     const sequence = ++requestSequence.current;
     setLoading(true);
-    setResponse(null);
     setErrorKey(null);
     try {
       const answer = await requestAdvice(request);
-      if (requestSequence.current === sequence) setResponse(answer);
+      if (
+        requestSequence.current !== sequence
+        || answer.schemaVersion !== CODEX_SCHEMA_VERSION
+        || answer.schemaVersion !== identity.schemaVersion
+        || !answer.advice.plan.trim()
+      ) {
+        if (requestSequence.current === sequence) setErrorKey("codexErrorMalformed");
+        return;
+      }
+      const saved: StoredCodexAdvice = {
+        ...identity,
+        plan: answer.advice.plan.trim(),
+        model: answer.model,
+        reasoning: answer.reasoning,
+        durationMs: answer.durationMs,
+        updatedAt: new Date().toISOString(),
+      };
+      try {
+        await repository.saveCodexAdvice(saved);
+      } catch {
+        throw new Error("codex_storage_failed");
+      }
+      if (requestSequence.current === sequence) setAdvice(saved);
     } catch (error) {
       if (requestSequence.current === sequence) {
         setErrorKey(errorTranslation(codexErrorCode(error)));
@@ -100,72 +160,60 @@ export function CodexAdvisorPanel({
     } finally {
       if (requestSequence.current === sequence) setLoading(false);
     }
-  }, [available, consent, request, requestAdvice]);
+  }, [available, consent, identity, request, repository, requestAdvice]);
 
-  const content = (
-    <>
-      <div className="codex-adviser-heading">
+  if (!available) {
+    return <p className="codex-plan-state">{t("codexWindowsOnly")}</p>;
+  }
+  if (!request || !identity) {
+    return <p className="codex-plan-state">{t("codexSelectRatedMove")}</p>;
+  }
+  if (showConsent) {
+    return (
+      <div className="codex-consent">
+        <strong>{t("codexConsentTitle")}</strong>
+        <p>{t("codexConsentBody")}</p>
+        <small>{t("codexConsentData")}</small>
         <div>
-          <span className="eyebrow">{t("codexAdviser")}</span>
-          <strong>{t("codexAdviserOptional")}</strong>
+          <button className="primary-button" onClick={() => void enable()}>{t("codexEnable")}</button>
+          <button className="secondary-button" onClick={() => setShowConsent(false)}>{t("codexCancel")}</button>
         </div>
+      </div>
+    );
+  }
+  if (cacheLoading) {
+    return <p className="codex-plan-state" role="status">{t("codexLoadingSaved")}</p>;
+  }
+
+  return advice ? (
+    <div className="codex-plan-answer" aria-live="polite" aria-busy={loading}>
+      <p>{advice.plan}</p>
+      {errorKey && <p className="codex-error" role="alert">{t(errorKey)}</p>}
+      <div className="codex-plan-actions">
+        <button className="secondary-button" disabled={loading} onClick={() => void ask()}>
+          {loading ? t("codexThinking") : t("codexRegenerate")}
+        </button>
         {consent === "enabled" && (
-          <button className="text-button" onClick={() => void disable()}>{t("codexDisable")}</button>
+          <button className="text-button" disabled={loading} onClick={() => void disable()}>
+            {t("codexDisable")}
+          </button>
         )}
       </div>
-
-      {!available ? (
-        <p className="codex-adviser-empty">{t("codexWindowsOnly")}</p>
-      ) : !request ? (
-        <p className="codex-adviser-empty">{t("codexSelectRatedMove")}</p>
-      ) : showConsent ? (
-        <div className="codex-consent">
-          <strong>{t("codexConsentTitle")}</strong>
-          <p>{t("codexConsentBody")}</p>
-          <small>{t("codexConsentData")}</small>
-          <div>
-            <button className="primary-button" onClick={() => void enable()}>{t("codexEnable")}</button>
-            <button className="secondary-button" onClick={() => void disable()}>{t("codexCancel")}</button>
-          </div>
-        </div>
-      ) : response ? (
-        <div className={`codex-answer${embedded ? " codex-answer-embedded" : ""}`} aria-live="polite">
-          {(!embedded || activeSection === "explanation") && (
-            <>
-              <section><h3>{t("codexSummary")}</h3><p>{response.advice.summary}</p></section>
-              <section><h3>{t("codexExplanation")}</h3><p>{response.advice.explanation}</p></section>
-            </>
-          )}
-          {(!embedded || activeSection === "planPractice") && (
-            <>
-              <section><h3>{t("codexPlan")}</h3><p>{response.advice.plan}</p></section>
-              <section><h3>{t("codexPractice")}</h3><p>{response.advice.practice}</p></section>
-            </>
-          )}
-          <div className="codex-answer-meta">
-            <span>{response.model}</span>
-            <span>{response.reasoning}</span>
-            <span>{t("codexDuration", { seconds: (response.durationMs / 1_000).toFixed(1) })}</span>
-          </div>
-          <button className="secondary-button" onClick={() => void ask()}>{t("codexRegenerate")}</button>
-        </div>
-      ) : (
-        <div className="codex-ready">
-          <p>{t("codexReadyBody")}</p>
-          {errorKey && <p className="codex-error" role="alert">{t(errorKey)}</p>}
-          <button className="primary-button" disabled={loading || consent === "loading"} onClick={() => void ask()}>
-            {loading ? t("codexThinking") : t("codexAsk")}
-          </button>
-        </div>
-      )}
-
-      <small className="codex-bridge-note">{t("codexBridgeNote")}</small>
-    </>
-  );
-
-  return embedded ? (
-    <div className="codex-adviser codex-adviser-embedded">{content}</div>
+    </div>
   ) : (
-    <section className="codex-adviser" aria-label={t("codexAdviser")}>{content}</section>
+    <div className="codex-ready">
+      <p>{t("codexReadyBody")}</p>
+      {errorKey && <p className="codex-error" role="alert">{t(errorKey)}</p>}
+      <div className="codex-plan-actions">
+        <button className="primary-button" disabled={loading || consent === "loading"} onClick={() => void ask()}>
+          {loading ? t("codexThinking") : t("codexAsk")}
+        </button>
+        {consent === "enabled" && (
+          <button className="text-button" disabled={loading} onClick={() => void disable()}>
+            {t("codexDisable")}
+          </button>
+        )}
+      </div>
+    </div>
   );
 }

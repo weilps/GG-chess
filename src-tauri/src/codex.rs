@@ -16,7 +16,7 @@ use tauri::State;
 
 const MODEL: &str = "gpt-5.6-terra";
 const REASONING: &str = "medium";
-const SCHEMA_VERSION: u8 = 1;
+const SCHEMA_VERSION: u8 = 2;
 const LOGIN_TIMEOUT: Duration = Duration::from_secs(10);
 const ADVICE_TIMEOUT: Duration = Duration::from_secs(180);
 const MAX_FEN_LENGTH: usize = 100;
@@ -55,21 +55,14 @@ pub struct CodexAdviceRequest {
     pub color: String,
     pub result: String,
     pub classification: String,
-    pub reason: String,
-    pub centipawn_loss: u32,
-    pub before: String,
-    pub after: String,
-    pub best_move_san: Option<String>,
+    pub best_move_san: String,
     pub principal_variation_san: Vec<String>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize, PartialEq)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct CodexAdvice {
-    pub summary: String,
-    pub explanation: String,
     pub plan: String,
-    pub practice: String,
 }
 
 #[derive(Debug, Clone, Serialize, PartialEq)]
@@ -126,23 +119,9 @@ fn validate_request(request: &CodexAdviceRequest) -> Result<(), String> {
                 | "miss"
                 | "blunder"
         )
-        || !matches!(
-            request.reason.as_str(),
-            "brilliantSacrifice"
-                | "greatMate"
-                | "greatRecovery"
-                | "engineBest"
-                | "missedWin"
-                | "centipawnLoss"
-        )
-        || request.before.is_empty()
-        || request.before.len() > 16
-        || request.after.is_empty()
-        || request.after.len() > 16
-        || request
-            .best_move_san
-            .as_ref()
-            .is_some_and(|san| san.is_empty() || san.len() > MAX_SAN_LENGTH)
+        || request.best_move_san.is_empty()
+        || request.best_move_san.len() > MAX_SAN_LENGTH
+        || request.principal_variation_san.is_empty()
         || request.principal_variation_san.len() > MAX_PV_PLIES
         || request
             .principal_variation_san
@@ -159,12 +138,9 @@ fn response_schema() -> serde_json::Value {
         "$schema": "https://json-schema.org/draft/2020-12/schema",
         "type": "object",
         "additionalProperties": false,
-        "required": ["summary", "explanation", "plan", "practice"],
+        "required": ["plan"],
         "properties": {
-            "summary": { "type": "string", "minLength": 1, "maxLength": 600 },
-            "explanation": { "type": "string", "minLength": 1, "maxLength": 1200 },
-            "plan": { "type": "string", "minLength": 1, "maxLength": 800 },
-            "practice": { "type": "string", "minLength": 1, "maxLength": 600 }
+            "plan": { "type": "string", "minLength": 1, "maxLength": 1000 }
         }
     })
 }
@@ -179,12 +155,14 @@ fn build_prompt(request: &CodexAdviceRequest) -> Result<String, String> {
     };
     Ok([
         "You are the optional Codex adviser inside ChessMate, a post-game chess review app.",
-        "Use only the supplied facts. Stockfish evaluations, move rating, best move, and principal variation are authoritative.",
+        "Use only the supplied position, move rating, played move, Stockfish best move, and principal variation.",
         "Never invent another engine line or claim a tactical motif as fact unless it is directly proven by the supplied legal SAN line.",
         "If you offer an interpretation beyond those facts, label it clearly as a hypothesis.",
         "Do not use tools, inspect files, run commands, or take any external action.",
-        "Give concise, practical coaching for the player who made the move.",
-        &format!("Write every response field in {language}."),
+        "Return one concise tactical Plan of two to four sentences for the player who made the move.",
+        "Explain the concrete tactical motif or positional reason, then give one actionable idea for similar positions.",
+        "Never narrate centipawn loss, score changes, rating thresholds, generic praise, or generic calculation slogans.",
+        &format!("Write the Plan in {language}."),
         "Return only the JSON object required by the output schema.",
         "",
         "Authoritative move facts:",
@@ -196,15 +174,7 @@ fn build_prompt(request: &CodexAdviceRequest) -> Result<String, String> {
 fn parse_advice(output: &str) -> Result<CodexAdvice, String> {
     let advice: CodexAdvice =
         serde_json::from_str(output.trim()).map_err(|_| "codex_malformed_output".to_string())?;
-    if advice.summary.trim().is_empty()
-        || advice.summary.chars().count() > 600
-        || advice.explanation.trim().is_empty()
-        || advice.explanation.chars().count() > 1_200
-        || advice.plan.trim().is_empty()
-        || advice.plan.chars().count() > 800
-        || advice.practice.trim().is_empty()
-        || advice.practice.chars().count() > 600
-    {
+    if advice.plan.trim().is_empty() || advice.plan.chars().count() > 1_000 {
         return Err("codex_malformed_output".to_string());
     }
     Ok(advice)
@@ -452,7 +422,7 @@ fn main() {
         println!("not-json");
         return;
     }
-    println!(r#"{{"summary":"Keep it","explanation":"Facts only.","plan":"Compare candidates.","practice":"Solve one position."}}"#);
+    println!(r#"{{"plan":"The knight develops with tempo and protects the centre. Keep the piece active before expanding."}}"#);
 }
 "##;
 
@@ -516,11 +486,7 @@ fn main() {
             color: "white".to_string(),
             result: "1-0".to_string(),
             classification: "best".to_string(),
-            reason: "engineBest".to_string(),
-            centipawn_loss: 0,
-            before: "+0.25".to_string(),
-            after: "+0.25".to_string(),
-            best_move_san: Some("Nf3".to_string()),
+            best_move_san: "Nf3".to_string(),
             principal_variation_san: vec!["Nf3".to_string(), "Nc6".to_string()],
         }
     }
@@ -530,9 +496,19 @@ fn main() {
         let prompt = build_prompt(&request()).unwrap();
         assert!(prompt.contains("\"san\":\"Nf3\""));
         assert!(prompt.contains("\"fenBefore\""));
+        assert!(prompt.contains("one concise tactical Plan"));
+        assert!(prompt.contains("Never narrate centipawn loss"));
         assert!(!prompt.contains("rawPgn"));
         assert!(!prompt.contains("whitePlayer"));
         assert!(!prompt.contains("chess.com"));
+        assert!(!prompt.contains("centipawnLoss\""));
+        assert_eq!(response_schema()["required"], json!(["plan"]));
+        assert_eq!(
+            response_schema()["properties"]
+                .as_object()
+                .map(serde_json::Map::len),
+            Some(1)
+        );
         assert!(validate_request(&CodexAdviceRequest {
             principal_variation_san: vec!["e4".to_string(); 7],
             ..request()
@@ -542,15 +518,16 @@ fn main() {
 
     #[test]
     fn parses_strict_bounded_json() {
-        let valid = r#"{"summary":"Keep it","explanation":"The evaluation stayed level.","plan":"Repeat the comparison.","practice":"Find two candidates."}"#;
-        assert_eq!(parse_advice(valid).unwrap().summary, "Keep it");
+        let valid = r#"{"plan":"Use the open file before the opponent can contest it."}"#;
+        assert_eq!(
+            parse_advice(valid).unwrap().plan,
+            "Use the open file before the opponent can contest it."
+        );
         assert_eq!(
             parse_advice("not json"),
             Err("codex_malformed_output".to_string())
         );
-        assert!(
-            parse_advice(r#"{"summary":"","explanation":"x","plan":"x","practice":"x"}"#).is_err()
-        );
+        assert!(parse_advice(r#"{"plan":""}"#).is_err());
     }
 
     #[test]
@@ -568,7 +545,7 @@ fn main() {
         let response = run_advice_with(&executable, &request(), Duration::from_secs(2)).unwrap();
         assert_eq!(response.model, MODEL);
         assert_eq!(response.reasoning, REASONING);
-        assert_eq!(response.advice.summary, "Keep it");
+        assert!(response.advice.plan.contains("knight"));
 
         let timeout_request = CodexAdviceRequest {
             san: "TIMEOUT".to_string(),
@@ -615,6 +592,6 @@ fn main() {
             .expect("Codex must return schema-valid advice");
         assert_eq!(response.schema_version, SCHEMA_VERSION);
         assert_eq!(response.model, MODEL);
-        assert!(!response.advice.summary.is_empty());
+        assert!(!response.advice.plan.is_empty());
     }
 }

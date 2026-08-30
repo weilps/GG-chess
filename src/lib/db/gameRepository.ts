@@ -4,6 +4,7 @@ import type { PortableBackup, RestoreSummary } from "../data/portableData";
 import type {
   AnalysisProfileId,
   EngineInfo,
+  Language,
   MultiPv,
   ParsedGame,
   PositionEvaluation,
@@ -57,12 +58,32 @@ export interface TrainingActivity {
   createdAt: string;
 }
 
+export interface CodexAdviceIdentity {
+  gameFingerprint: string;
+  positionIndex: number;
+  language: Language;
+  analysisFingerprint: string;
+  promptVersion: number;
+  schemaVersion: number;
+}
+
+export interface StoredCodexAdvice extends CodexAdviceIdentity {
+  plan: string;
+  model: string;
+  reasoning: string;
+  durationMs: number;
+  updatedAt: string;
+}
+
 export interface GameRepository {
   initialize(): Promise<void>;
   listGames(): Promise<StoredGame[]>;
   addGames(games: ParsedGame[]): Promise<AddGamesResult>;
+  deleteGame(gameFingerprint: string): Promise<void>;
   getSetting(key: string): Promise<string | null>;
   setSetting(key: string, value: string): Promise<void>;
+  getCodexAdvice(identity: CodexAdviceIdentity): Promise<StoredCodexAdvice | null>;
+  saveCodexAdvice(advice: StoredCodexAdvice): Promise<void>;
   listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]>;
   listAllChessComSyncStates(): Promise<ChessComMonthSyncState[]>;
   saveChessComSyncState(state: ChessComMonthSyncState): Promise<void>;
@@ -117,6 +138,7 @@ export class MemoryGameRepository implements GameRepository {
   private readonly puzzleProgress = new Map<string, PuzzleProgress>();
   private readonly trainingActivities = new Map<string, TrainingActivity>();
   private readonly trainingDays = new Set<string>();
+  private readonly codexAdvice = new Map<string, StoredCodexAdvice>();
 
   async initialize(): Promise<void> {
     return Promise.resolve();
@@ -141,12 +163,31 @@ export class MemoryGameRepository implements GameRepository {
     return { added, duplicates };
   }
 
+  async deleteGame(gameFingerprint: string): Promise<void> {
+    this.games.delete(gameFingerprint);
+    for (const [key, evaluation] of this.evaluations) {
+      if (evaluation.gameFingerprint === gameFingerprint) this.evaluations.delete(key);
+    }
+    for (const [key, advice] of this.codexAdvice) {
+      if (advice.gameFingerprint === gameFingerprint) this.codexAdvice.delete(key);
+    }
+  }
+
   async getSetting(key: string): Promise<string | null> {
     return this.settings.get(key) ?? null;
   }
 
   async setSetting(key: string, value: string): Promise<void> {
     this.settings.set(key, value);
+  }
+
+  async getCodexAdvice(identity: CodexAdviceIdentity): Promise<StoredCodexAdvice | null> {
+    const advice = this.codexAdvice.get(codexAdviceKey(identity));
+    return advice ? { ...advice } : null;
+  }
+
+  async saveCodexAdvice(advice: StoredCodexAdvice): Promise<void> {
+    this.codexAdvice.set(codexAdviceKey(advice), { ...advice });
   }
 
   async listChessComSyncStates(username: string): Promise<ChessComMonthSyncState[]> {
@@ -315,6 +356,17 @@ export class MemoryGameRepository implements GameRepository {
   }
 }
 
+function codexAdviceKey(identity: CodexAdviceIdentity): string {
+  return [
+    identity.gameFingerprint,
+    identity.positionIndex,
+    identity.language,
+    identity.analysisFingerprint,
+    identity.promptVersion,
+    identity.schemaVersion,
+  ].join("\u0000");
+}
+
 function analysisKey(
   gameFingerprint: string,
   engine: EngineInfo,
@@ -420,6 +472,36 @@ interface TrainingActivityRow {
   created_at: string;
 }
 
+interface CodexAdviceRow {
+  game_fingerprint: string;
+  position_index: number;
+  language: Language;
+  analysis_fingerprint: string;
+  prompt_version: number;
+  schema_version: number;
+  plan: string;
+  model: string;
+  reasoning: string;
+  duration_ms: number;
+  updated_at: string;
+}
+
+function codexAdviceFromRow(row: CodexAdviceRow): StoredCodexAdvice {
+  return {
+    gameFingerprint: row.game_fingerprint,
+    positionIndex: row.position_index,
+    language: row.language,
+    analysisFingerprint: row.analysis_fingerprint,
+    promptVersion: row.prompt_version,
+    schemaVersion: row.schema_version,
+    plan: row.plan,
+    model: row.model,
+    reasoning: row.reasoning,
+    durationMs: row.duration_ms,
+    updatedAt: row.updated_at,
+  };
+}
+
 function evaluationFromRow(row: EvaluationRow): StoredPositionEvaluation {
   const rankOne: RankedVariation = {
     rank: 1,
@@ -489,6 +571,7 @@ export class SqliteGameRepository implements GameRepository {
 
   async initialize(): Promise<void> {
     this.database = await Database.load("sqlite:chessmate.db");
+    await this.database.execute("PRAGMA foreign_keys = ON");
     await this.database.execute(`
       CREATE TABLE IF NOT EXISTS games (
         fingerprint TEXT PRIMARY KEY NOT NULL,
@@ -509,6 +592,26 @@ export class SqliteGameRepository implements GameRepository {
       CREATE TABLE IF NOT EXISTS app_settings (
         key TEXT PRIMARY KEY NOT NULL,
         value TEXT NOT NULL
+      )
+    `);
+    await this.database.execute(`
+      CREATE TABLE IF NOT EXISTS codex_advice (
+        game_fingerprint TEXT NOT NULL,
+        position_index INTEGER NOT NULL,
+        language TEXT NOT NULL CHECK (language IN ('en', 'fr')),
+        analysis_fingerprint TEXT NOT NULL,
+        prompt_version INTEGER NOT NULL,
+        schema_version INTEGER NOT NULL,
+        plan TEXT NOT NULL,
+        model TEXT NOT NULL,
+        reasoning TEXT NOT NULL,
+        duration_ms INTEGER NOT NULL,
+        updated_at TEXT NOT NULL,
+        PRIMARY KEY (
+          game_fingerprint, position_index, language, analysis_fingerprint,
+          prompt_version, schema_version
+        ),
+        FOREIGN KEY (game_fingerprint) REFERENCES games(fingerprint) ON DELETE CASCADE
       )
     `);
     await this.database.execute(`
@@ -688,6 +791,13 @@ export class SqliteGameRepository implements GameRepository {
     return { added, duplicates };
   }
 
+  async deleteGame(gameFingerprint: string): Promise<void> {
+    await this.requireDatabase().execute(
+      "DELETE FROM games WHERE fingerprint = $1",
+      [gameFingerprint],
+    );
+  }
+
   async getSetting(key: string): Promise<string | null> {
     const rows = await this.requireDatabase().select<SettingRow[]>(
       "SELECT value FROM app_settings WHERE key = $1",
@@ -701,6 +811,54 @@ export class SqliteGameRepository implements GameRepository {
       `INSERT INTO app_settings (key, value) VALUES ($1, $2)
        ON CONFLICT(key) DO UPDATE SET value = excluded.value`,
       [key, value],
+    );
+  }
+
+  async getCodexAdvice(identity: CodexAdviceIdentity): Promise<StoredCodexAdvice | null> {
+    const rows = await this.requireDatabase().select<CodexAdviceRow[]>(
+      `SELECT * FROM codex_advice
+       WHERE game_fingerprint = $1 AND position_index = $2 AND language = $3
+         AND analysis_fingerprint = $4 AND prompt_version = $5 AND schema_version = $6`,
+      [
+        identity.gameFingerprint,
+        identity.positionIndex,
+        identity.language,
+        identity.analysisFingerprint,
+        identity.promptVersion,
+        identity.schemaVersion,
+      ],
+    );
+    return rows[0] ? codexAdviceFromRow(rows[0]) : null;
+  }
+
+  async saveCodexAdvice(advice: StoredCodexAdvice): Promise<void> {
+    await this.requireDatabase().execute(
+      `INSERT INTO codex_advice (
+        game_fingerprint, position_index, language, analysis_fingerprint,
+        prompt_version, schema_version, plan, model, reasoning, duration_ms, updated_at
+      ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+      ON CONFLICT(
+        game_fingerprint, position_index, language, analysis_fingerprint,
+        prompt_version, schema_version
+      ) DO UPDATE SET
+        plan = excluded.plan,
+        model = excluded.model,
+        reasoning = excluded.reasoning,
+        duration_ms = excluded.duration_ms,
+        updated_at = excluded.updated_at`,
+      [
+        advice.gameFingerprint,
+        advice.positionIndex,
+        advice.language,
+        advice.analysisFingerprint,
+        advice.promptVersion,
+        advice.schemaVersion,
+        advice.plan,
+        advice.model,
+        advice.reasoning,
+        advice.durationMs,
+        advice.updatedAt,
+      ],
     );
   }
 

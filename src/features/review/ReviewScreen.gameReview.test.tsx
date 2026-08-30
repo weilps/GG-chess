@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { Chess } from "chess.js";
 import { describe, expect, it, vi } from "vitest";
 import { translate } from "../../i18n/translations";
-import { MemoryGameRepository } from "../../lib/db/gameRepository";
+import { MemoryGameRepository, type CodexAdviceIdentity } from "../../lib/db/gameRepository";
 import type { AnalysisSnapshot, StoredGame } from "../../types";
 import type { CodexAdviceRequest } from "../adviser/codexClient";
 import { ReviewScreen } from "./ReviewScreen";
@@ -14,8 +14,11 @@ vi.mock("react-chessboard", () => ({
 }));
 
 vi.mock("../adviser/CodexAdvisorPanel", () => ({
-  CodexAdvisorPanel: ({ request }: { request: CodexAdviceRequest | null }) => (
-    <button data-testid="codex-adviser-request">
+  CodexAdvisorPanel: ({ request, identity }: {
+    request: CodexAdviceRequest | null;
+    identity: CodexAdviceIdentity | null;
+  }) => (
+    <button data-testid="codex-adviser-request" data-identity={identity?.analysisFingerprint}>
       {request ? `${request.san}:${request.classification}` : "unavailable"}
     </button>
   ),
@@ -166,6 +169,7 @@ describe("ReviewScreen Game Review integration", () => {
     expect(coach).toHaveTextContent("Played e5");
     expect(coach).toHaveTextContent("c5 Nf3");
     expect(screen.getByTestId("codex-adviser-request")).toHaveTextContent("e5:inaccuracy");
+    expect(screen.getByTestId("codex-adviser-request").getAttribute("data-identity")).toMatch(/^[0-9a-f]{16}$/);
 
     fireEvent.click(screen.getByRole("button", { name: "Compare fixture" }));
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
@@ -179,6 +183,6 @@ describe("ReviewScreen Game Review integration", () => {
       .not.toHaveAttribute("aria-valuenow");
     expect(coach).toHaveTextContent("Stockfish is analyzing this game.");
     expect(coach).not.toHaveTextContent("c5 Nf3");
-    expect(screen.getByTestId("codex-adviser-request")).toHaveTextContent("unavailable");
+    expect(screen.queryByTestId("codex-adviser-request")).not.toBeInTheDocument();
   });
 });
