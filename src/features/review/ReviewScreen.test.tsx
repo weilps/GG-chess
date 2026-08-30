@@ -4,6 +4,7 @@ import { translate } from "../../i18n/translations";
 import { MemoryGameRepository } from "../../lib/db/gameRepository";
 import type { StoredGame } from "../../types";
 import { ReviewScreen } from "./ReviewScreen";
+import { shouldPreserveReviewArrowKey } from "./reviewKeyboard";
 
 vi.mock("react-chessboard", () => ({
   Chessboard: ({ options }: { options: { position: string } }) => (
@@ -38,6 +39,52 @@ describe("ReviewScreen", () => {
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent("after-e4");
     fireEvent.click(screen.getByText("Nf3"));
     expect(screen.getByTestId("chessboard-position")).toHaveTextContent("after-nf3");
+  });
+
+  it("keeps navigation available after ordinary board and move controls receive focus", () => {
+    render(<ReviewScreen game={game} repository={repository} language="en" onBack={vi.fn()} t={(key, variables) => translate("en", key, variables)} />);
+
+    const flip = screen.getByRole("button", { name: "Flip board" });
+    flip.focus();
+    fireEvent.keyDown(flip, { key: "ArrowRight" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent("after-e4");
+
+    const move = screen.getByText("e4").closest("button");
+    expect(move).not.toBeNull();
+    move!.focus();
+    fireEvent.keyDown(move!, { key: "ArrowRight" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent("after-e5");
+  });
+
+  it("preserves arrows for native fields, editable content, composites, and active layers", () => {
+    const host = document.createElement("div");
+    const input = document.createElement("input");
+    const select = document.createElement("select");
+    const editable = document.createElement("div");
+    const slider = document.createElement("div");
+    const ordinaryButton = document.createElement("button");
+    editable.setAttribute("contenteditable", "true");
+    slider.setAttribute("role", "slider");
+    host.append(input, select, editable, slider, ordinaryButton);
+    document.body.append(host);
+
+    expect(shouldPreserveReviewArrowKey(input)).toBe(true);
+    expect(shouldPreserveReviewArrowKey(select)).toBe(true);
+    expect(shouldPreserveReviewArrowKey(editable)).toBe(true);
+    expect(shouldPreserveReviewArrowKey(slider)).toBe(true);
+    expect(shouldPreserveReviewArrowKey(ordinaryButton)).toBe(false);
+
+    const dialog = document.createElement("div");
+    dialog.setAttribute("role", "dialog");
+    host.append(dialog);
+    expect(shouldPreserveReviewArrowKey(ordinaryButton)).toBe(true);
+    dialog.remove();
+
+    const popover = document.createElement("div");
+    popover.setAttribute("popover", "auto");
+    host.append(popover);
+    expect(shouldPreserveReviewArrowKey(ordinaryButton)).toBe(true);
+    host.remove();
   });
 
   it("flips the board", () => {
@@ -84,6 +131,7 @@ describe("ReviewScreen", () => {
     fireEvent.keyDown(movesTab, { key: "ArrowRight" });
     expect(screen.getByRole("tab", { name: "Summary" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByRole("tabpanel", { name: "Summary" })).toBeInTheDocument();
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent("start");
   });
 
   it("keeps language and secondary destinations available in the review header", () => {
@@ -107,7 +155,10 @@ describe("ReviewScreen", () => {
     expect(onLanguageChange).toHaveBeenCalledWith("fr");
     const moreButton = screen.getByRole("button", { name: "More" });
     fireEvent.click(moreButton);
-    fireEvent.click(screen.getByRole("menuitem", { name: "Training Lab" }));
+    const trainingItem = screen.getByRole("menuitem", { name: "Training Lab" });
+    fireEvent.keyDown(trainingItem, { key: "ArrowRight" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent("start");
+    fireEvent.click(trainingItem);
     fireEvent.click(moreButton);
     fireEvent.click(screen.getByRole("menuitem", { name: "About" }));
     expect(onOpenTraining).toHaveBeenCalledOnce();

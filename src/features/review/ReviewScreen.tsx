@@ -14,6 +14,7 @@ import { buildBoardGuidance } from "./boardGuidance";
 import { EvaluationBar } from "./EvaluationBar";
 import { EvaluationChart } from "./EvaluationChart";
 import { GameReviewSummary } from "./GameReviewSummary";
+import { shouldPreserveReviewArrowKey } from "./reviewKeyboard";
 
 interface ReviewScreenProps {
   game: StoredGame;
@@ -92,8 +93,7 @@ export function ReviewScreen({
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.target instanceof Element
-        && event.target.closest("button, input, select, textarea, [contenteditable='true']")) return;
+      if (event.defaultPrevented || shouldPreserveReviewArrowKey(event.target)) return;
       if (event.key === "ArrowLeft") {
         event.preventDefault();
         setPositionIndex((current) => Math.max(0, current - 1));

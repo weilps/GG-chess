@@ -15,9 +15,9 @@ vi.mock("react-chessboard", () => ({
 
 vi.mock("../adviser/CodexAdvisorPanel", () => ({
   CodexAdvisorPanel: ({ request }: { request: CodexAdviceRequest | null }) => (
-    <div data-testid="codex-adviser-request">
+    <button data-testid="codex-adviser-request">
       {request ? `${request.san}:${request.classification}` : "unavailable"}
-    </div>
+    </button>
   ),
 }));
 
@@ -53,6 +53,9 @@ vi.mock("../engine/EnginePanel", async () => {
       useEffect(() => onAnalysisStateChange?.(snapshot), [onAnalysisStateChange]);
       return (
         <>
+          <button aria-label="Analyze" onClick={() => onAnalysisStateChange?.(snapshot)}>
+            Analyze fixture
+          </button>
           <button onClick={() => onAnalysisStateChange?.({ ...snapshot, guidanceMode: "compare" })}>
             Compare fixture
           </button>
@@ -98,6 +101,42 @@ function reviewedGame(): StoredGame {
 }
 
 describe("ReviewScreen Game Review integration", () => {
+  it("navigates from Analyze, chart, and Coach controls before and during cache replacement", async () => {
+    const game = reviewedGame();
+    render(
+      <ReviewScreen
+        game={game}
+        repository={new MemoryGameRepository()}
+        language="en"
+        onBack={vi.fn()}
+        t={(key, variables) => translate("en", key, variables)}
+      />,
+    );
+
+    const analyze = screen.getByRole("button", { name: "Analyze" });
+    analyze.focus();
+    fireEvent.keyDown(analyze, { key: "ArrowRight" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
+
+    const chartPoint = await screen.findByRole("button", {
+      name: "Position 1, after e4, evaluation +0.50, Best",
+    });
+    chartPoint.focus();
+    fireEvent.keyDown(chartPoint, { key: "ArrowRight" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[2]);
+
+    const coachControl = screen.getByTestId("codex-adviser-request");
+    coachControl.focus();
+    fireEvent.keyDown(coachControl, { key: "ArrowLeft" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[1]);
+
+    const switchProfile = screen.getByRole("button", { name: "Switch profile fixture" });
+    fireEvent.click(switchProfile);
+    fireEvent.keyDown(switchProfile, { key: "ArrowRight" });
+    expect(screen.getByTestId("chessboard-position")).toHaveTextContent(game.positions[2]);
+    expect(screen.queryByRole("img", { name: "Stockfish guidance arrows" })).not.toBeInTheDocument();
+  });
+
   it("keeps graph, critical moments, board, and active cache synchronized", async () => {
     const game = reviewedGame();
     render(

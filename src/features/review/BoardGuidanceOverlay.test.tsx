@@ -98,7 +98,7 @@ describe("board guidance", () => {
       { rank: 1, sourceSquare: "c7", targetSquare: "c5", evaluation: "-0.90", classification: "best" },
       { rank: 2, sourceSquare: "e7", targetSquare: "e5", evaluation: "-0.55", classification: "good" },
       { rank: 3, sourceSquare: "g8", targetSquare: "f6", evaluation: "-0.20", classification: "inaccuracy" },
-      { rank: null, sourceSquare: "e2", targetSquare: "e4", tone: "warning", warningSymbol: "!" },
+      { rank: null, sourceSquare: "e2", targetSquare: "e4", tone: "warning", warningSymbol: "!", evaluation: "-0.90" },
     ]);
   });
 
@@ -107,10 +107,13 @@ describe("board guidance", () => {
     const plan = buildBoardGuidance({
       enabled: true,
       engineStatus: "ready",
-      evaluations: [evaluation(1, [
-        variation(1, "c7c5", -90),
-        variation(2, "e7e5", -55),
-      ])],
+      evaluations: [
+        evaluation(1, [
+          variation(1, "c7c5", -90),
+          variation(2, "e7e5", -55),
+        ]),
+        evaluation(2, [variation(1, "g1f3", 25)]),
+      ],
       game,
       loading: false,
       mode: "compare",
@@ -126,7 +129,10 @@ describe("board guidance", () => {
       sourceSquare: "e7",
       targetSquare: "e5",
       played: true,
+      tone: "blunder",
       warningSymbol: "!!",
+      evaluation: "+0.25",
+      classification: "blunder",
     });
   });
 
@@ -152,7 +158,7 @@ describe("board guidance", () => {
     expect(plan.arrows).toEqual([]);
   });
 
-  it("mirrors geometry after Flip and exposes rank, width, opacity, and accessible detail", () => {
+  it("mirrors geometry after Flip and exposes cyan hierarchy, integrated heads, badges, and accessible detail", () => {
     expect(squareCenter("a1", "white")).toEqual({ x: 50, y: 750 });
     expect(squareCenter("a1", "black")).toEqual({ x: 750, y: 50 });
     const arrows = [
@@ -163,35 +169,70 @@ describe("board guidance", () => {
 
     const rankOne = screen.getByTestId("guidance-arrow-1");
     const rankTwo = screen.getByTestId("guidance-arrow-2");
-    expect(rankOne).toHaveAttribute("stroke-width", "18");
-    expect(rankTwo).toHaveAttribute("stroke-width", "13");
-    expect(rankOne).toHaveAttribute("stroke-opacity", "0.94");
-    expect(rankTwo).toHaveAttribute("stroke-opacity", "0.7");
+    expect(rankOne).toHaveAttribute("stroke", "var(--guidance-candidate)");
+    expect(rankTwo).toHaveAttribute("stroke", "var(--guidance-candidate)");
+    expect(rankOne).toHaveAttribute("stroke-width", "16");
+    expect(rankTwo).toHaveAttribute("stroke-width", "12");
+    expect(rankOne).toHaveAttribute("stroke-opacity", "0.96");
+    expect(rankTwo).toHaveAttribute("stroke-opacity", "0.76");
+    expect(rankOne).toHaveAttribute("data-head-visible", "true");
+    expect(rankOne.getAttribute("marker-end")).toMatch(/^url\(#.+-arrow-0\)$/);
+    const badge = screen.getByTestId("guidance-label-1");
+    expect(badge).toHaveClass("rating-best");
+    expect(badge).toHaveAttribute("data-corner", "bottom-right");
+    expect(badge.querySelectorAll("circle")).toHaveLength(2);
+    expect(badge.querySelector(".guidance-rating-icon")).not.toBeNull();
+    expect(badge).toHaveTextContent("+1.95");
     expect(screen.getByRole("img", { name: "Stockfish guidance arrows" })).toHaveAccessibleDescription(
-      /Rank 1, evaluation \+1\.95, from a1 to a8\./,
+      /Candidate rank 1: Best, White evaluation \+1\.95, from a1 to a8\./,
     );
   });
 
   it.each(["white", "black"] as const)(
-    "keeps four shared edge-destination labels separate when oriented %s",
+    "keeps four shared edge-destination badges in deterministic square corners when oriented %s",
     (orientation) => {
       const arrows = [
         { key: "one", sourceSquare: "a1", targetSquare: "a8", tone: "ranked" as const, rank: 1 as const, evaluation: "+1.95", played: false, warningSymbol: null, classification: "best" as const, classificationReason: "engineBest" as const, centipawnLoss: 0 },
         { key: "two", sourceSquare: "b1", targetSquare: "a8", tone: "ranked" as const, rank: 2 as const, evaluation: "+1.20", played: false, warningSymbol: null, classification: "good" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 75 },
         { key: "three", sourceSquare: "c1", targetSquare: "a8", tone: "ranked" as const, rank: 3 as const, evaluation: "+0.80", played: false, warningSymbol: null, classification: "mistake" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 115 },
-        { key: "played", sourceSquare: "d1", targetSquare: "a8", tone: "blunder" as const, rank: null, evaluation: null, played: true, warningSymbol: "!!" as const, classification: "blunder" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 300 },
+        { key: "played", sourceSquare: "d1", targetSquare: "a8", tone: "blunder" as const, rank: null, evaluation: "+0.10", played: true, warningSymbol: "!!" as const, classification: "blunder" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 300 },
       ];
       render(<BoardGuidanceOverlay arrows={arrows} orientation={orientation} t={t} />);
 
-      const labelCenters = [
+      const badges = [
         screen.getByTestId("guidance-label-1"),
         screen.getByTestId("guidance-label-2"),
         screen.getByTestId("guidance-label-3"),
         screen.getByTestId("guidance-label-played"),
-      ].map((label) => Number(label.getAttribute("data-label-y"))).sort((left, right) => left - right);
-      expect(labelCenters[0]).toBeGreaterThanOrEqual(18);
-      expect(labelCenters[3]).toBeLessThanOrEqual(782);
-      expect(labelCenters.slice(1).every((center, index) => center - labelCenters[index] >= 36)).toBe(true);
+      ];
+      const corners = badges.map((badge) => badge.getAttribute("data-corner"));
+      expect(new Set(corners).size).toBe(4);
+      expect(corners[0]).toBe(orientation === "white" ? "top-right" : "bottom-right");
+      expect(new Set(badges.map((badge) => badge.getAttribute("transform"))).size).toBe(4);
+      for (const badge of badges) {
+        expect(Number(badge.getAttribute("data-label-x"))).toBeGreaterThanOrEqual(0);
+        expect(Number(badge.getAttribute("data-label-x"))).toBeLessThanOrEqual(800);
+        expect(Number(badge.getAttribute("data-label-y"))).toBeGreaterThanOrEqual(0);
+        expect(Number(badge.getAttribute("data-label-y"))).toBeLessThanOrEqual(800);
+      }
     },
   );
+
+  it("uses amber and red warning arrows with rating icons and French accessible text", () => {
+    const arrows = [
+      { key: "warning", sourceSquare: "e2", targetSquare: "e4", tone: "warning" as const, rank: null, evaluation: "+0.40", played: true, warningSymbol: "!" as const, classification: "mistake" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 140 },
+      { key: "blunder", sourceSquare: "d7", targetSquare: "d5", tone: "blunder" as const, rank: null, evaluation: "-2.10", played: true, warningSymbol: "!!" as const, classification: "blunder" as const, classificationReason: "centipawnLoss" as const, centipawnLoss: 310 },
+    ];
+    render(<BoardGuidanceOverlay
+      arrows={arrows}
+      orientation="white"
+      t={(key, variables) => translate("fr", key, variables)}
+    />);
+
+    expect(screen.getAllByTestId("guidance-arrow-played")[0]).toHaveAttribute("stroke", "var(--guidance-warning)");
+    expect(screen.getAllByTestId("guidance-arrow-played")[1]).toHaveAttribute("stroke", "var(--guidance-blunder)");
+    expect(screen.getByRole("img", { name: "Flèches de guidage Stockfish" })).toHaveAccessibleDescription(
+      /Erreur, évaluation des Blancs \+0\.40.*Gaffe, évaluation des Blancs -2\.10/,
+    );
+  });
 });

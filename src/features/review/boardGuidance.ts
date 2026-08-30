@@ -60,7 +60,9 @@ function variationMove(variation: RankedVariation): { sourceSquare: string; targ
   return match ? { sourceSquare: match[1], targetSquare: match[2] } : null;
 }
 
-export function formatGuidanceEvaluation(variation: RankedVariation): string {
+export function formatGuidanceEvaluation(
+  variation: Pick<RankedVariation, "mate" | "scoreCp">,
+): string {
   if (variation.mate !== null) {
     return `${variation.mate < 0 ? "-M" : "M"}${Math.abs(variation.mate)}`;
   }
@@ -73,8 +75,12 @@ function playedArrow(
   game: StoredGame,
   positionIndex: number,
   selectedRating: MoveClassification | null,
+  evaluation: PositionEvaluation | undefined,
 ): GuidanceArrow | null {
-  if (positionIndex < 1 || !selectedRating || !WARNING_CLASSIFICATIONS.has(selectedRating.classification)) {
+  if (positionIndex < 1
+    || !selectedRating
+    || !evaluation
+    || !WARNING_CLASSIFICATIONS.has(selectedRating.classification)) {
     return null;
   }
   const move = playedMoveFromSan(game.positions[positionIndex - 1], game.moves[positionIndex - 1]);
@@ -86,7 +92,7 @@ function playedArrow(
     targetSquare: move.to,
     tone: blunder ? "blunder" : "warning",
     rank: null,
-    evaluation: null,
+    evaluation: formatGuidanceEvaluation(evaluation),
     played: true,
     warningSymbol: blunder ? "!!" : "!",
     classification: selectedRating.classification,
@@ -141,14 +147,21 @@ export function buildBoardGuidance(options: BuildBoardGuidanceOptions): BoardGui
     });
   }
 
-  const actual = playedArrow(options.game, options.positionIndex, options.selectedRating);
+  const actual = playedArrow(
+    options.game,
+    options.positionIndex,
+    options.selectedRating,
+    options.evaluations.find((item) => item.positionIndex === options.positionIndex),
+  );
   if (!actual) return { boardPositionIndex, arrows };
   const duplicate = arrows.find(
     (arrow) => arrow.sourceSquare === actual.sourceSquare && arrow.targetSquare === actual.targetSquare,
   );
   if (duplicate) {
     duplicate.played = true;
+    duplicate.tone = actual.tone;
     duplicate.warningSymbol = actual.warningSymbol;
+    duplicate.evaluation = actual.evaluation;
     duplicate.classification = actual.classification;
     duplicate.classificationReason = actual.classificationReason;
     duplicate.centipawnLoss = actual.centipawnLoss;

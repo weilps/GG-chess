@@ -1,5 +1,7 @@
 import { useId, useMemo } from "react";
 import type { TranslationKey } from "../../i18n/translations";
+import { RatingIconGlyph } from "../classification/RatingIcon";
+import { ratingLabel } from "../classification/ratingPresentation";
 import { squareCenter, type BoardOrientation, type GuidanceArrow } from "./boardGuidance";
 
 interface BoardGuidanceOverlayProps {
@@ -8,6 +10,13 @@ interface BoardGuidanceOverlayProps {
   t: (key: TranslationKey, variables?: Record<string, string | number>) => string;
 }
 
+const BADGE_CORNERS = [
+  { x: -24, y: -24, name: "top-left" },
+  { x: 24, y: -24, name: "top-right" },
+  { x: 24, y: 24, name: "bottom-right" },
+  { x: -24, y: 24, name: "bottom-left" },
+] as const;
+
 function arrowGeometry(sourceSquare: string, targetSquare: string, orientation: BoardOrientation) {
   const source = squareCenter(sourceSquare, orientation);
   const target = squareCenter(targetSquare, orientation);
@@ -15,39 +24,63 @@ function arrowGeometry(sourceSquare: string, targetSquare: string, orientation: 
   const unitX = (target.x - source.x) / distance;
   const unitY = (target.y - source.y) / distance;
   return {
-    x1: source.x + unitX * 18,
-    y1: source.y + unitY * 18,
-    x2: target.x - unitX * 34,
-    y2: target.y - unitY * 34,
-    target,
+    x1: source.x + unitX * 22,
+    y1: source.y + unitY * 22,
+    x2: target.x - unitX * 23,
+    y2: target.y - unitY * 23,
   };
 }
 
 function arrowAppearance(arrow: GuidanceArrow) {
-  if (arrow.tone === "blunder") return { color: "#b83232", opacity: 0.92, width: 14 };
-  if (arrow.tone === "warning") return { color: "#d36c28", opacity: 0.88, width: 13 };
-  if (arrow.rank === 1) return { color: "#23834d", opacity: 0.94, width: 18 };
-  if (arrow.rank === 2) return { color: "#23834d", opacity: 0.7, width: 13 };
-  return { color: "#23834d", opacity: 0.5, width: 9 };
+  if (arrow.tone === "blunder") {
+    return { color: "var(--guidance-blunder)", outline: "var(--guidance-blunder-outline)", opacity: 0.94, width: 14 };
+  }
+  if (arrow.tone === "warning") {
+    return { color: "var(--guidance-warning)", outline: "var(--guidance-warning-outline)", opacity: 0.94, width: 13 };
+  }
+  if (arrow.rank === 1) {
+    return { color: "var(--guidance-candidate)", outline: "var(--guidance-candidate-outline)", opacity: 0.96, width: 16 };
+  }
+  if (arrow.rank === 2) {
+    return { color: "var(--guidance-candidate)", outline: "var(--guidance-candidate-outline)", opacity: 0.76, width: 12 };
+  }
+  return { color: "var(--guidance-candidate)", outline: "var(--guidance-candidate-outline)", opacity: 0.58, width: 9 };
+}
+
+function preferredCornerIndex(arrow: GuidanceArrow, orientation: BoardOrientation): number {
+  const source = squareCenter(arrow.sourceSquare, orientation);
+  const target = squareCenter(arrow.targetSquare, orientation);
+  const deltaX = target.x - source.x;
+  const deltaY = target.y - source.y;
+  const horizontalDirection = Math.abs(deltaX) < 1
+    ? arrow.rank === 2 ? -1 : 1
+    : Math.sign(deltaX);
+  const verticalDirection = Math.abs(deltaY) < 1
+    ? arrow.rank === 2 ? -1 : 1
+    : Math.sign(deltaY);
+  if (horizontalDirection < 0 && verticalDirection < 0) return 0;
+  if (horizontalDirection >= 0 && verticalDirection < 0) return 1;
+  if (horizontalDirection >= 0 && verticalDirection >= 0) return 2;
+  return 3;
 }
 
 export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOverlayProps) {
   const rawId = useId();
   const markerPrefix = rawId.replace(/[^a-zA-Z0-9_-]/g, "");
   const descriptionId = `${markerPrefix}-description`;
-  const destinationIndexes = useMemo(() => {
-    const seen = new Map<string, number>();
+  const badgeCornerIndexes = useMemo(() => {
+    const usedByDestination = new Map<string, Set<number>>();
     return arrows.map((arrow) => {
-      const index = seen.get(arrow.targetSquare) ?? 0;
-      seen.set(arrow.targetSquare, index + 1);
+      const used = usedByDestination.get(arrow.targetSquare) ?? new Set<number>();
+      usedByDestination.set(arrow.targetSquare, used);
+      const preferred = preferredCornerIndex(arrow, orientation);
+      const index = [0, 1, 2, 3]
+        .map((offset) => (preferred + offset) % BADGE_CORNERS.length)
+        .find((candidate) => !used.has(candidate)) ?? preferred;
+      used.add(index);
       return index;
     });
-  }, [arrows]);
-  const destinationTotals = useMemo(() => {
-    const totals = new Map<string, number>();
-    for (const arrow of arrows) totals.set(arrow.targetSquare, (totals.get(arrow.targetSquare) ?? 0) + 1);
-    return totals;
-  }, [arrows]);
+  }, [arrows, orientation]);
 
   if (arrows.length === 0) return null;
 
@@ -63,22 +96,28 @@ export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOv
         <defs>
           {arrows.map((arrow, index) => {
             const appearance = arrowAppearance(arrow);
-            const headSize = appearance.width >= 18 ? 30 : appearance.width >= 13 ? 26 : 22;
+            const headLength = appearance.width * 2.45;
+            const headHeight = appearance.width * 2.05;
             return (
               <marker
                 key={`marker-${arrow.key}`}
                 id={`${markerPrefix}-arrow-${index}`}
-                markerWidth={headSize}
-                markerHeight={headSize}
-                refX={headSize - 2}
-                refY={headSize / 2}
+                markerWidth={headLength}
+                markerHeight={headHeight}
+                refX={headLength - 2}
+                refY={headHeight / 2}
                 orient="auto"
                 markerUnits="userSpaceOnUse"
               >
                 <path
-                  d={`M0,0 L0,${headSize} L${headSize},${headSize / 2} z`}
+                  d={`M2,2 L2,${headHeight - 2} L${headLength - 2},${headHeight / 2} Z`}
                   fill={appearance.color}
                   fillOpacity={appearance.opacity}
+                  stroke={appearance.outline}
+                  strokeOpacity={Math.max(0.76, appearance.opacity)}
+                  strokeWidth="5"
+                  strokeLinejoin="round"
+                  paintOrder="stroke fill"
                 />
               </marker>
             );
@@ -88,64 +127,83 @@ export function BoardGuidanceOverlay({ arrows, orientation, t }: BoardGuidanceOv
           const geometry = arrowGeometry(arrow.sourceSquare, arrow.targetSquare, orientation);
           const appearance = arrowAppearance(arrow);
           return (
-            <line
-              key={`line-${arrow.key}`}
-              data-testid={`guidance-arrow-${arrow.rank ?? "played"}`}
-              data-source={arrow.sourceSquare}
-              data-target={arrow.targetSquare}
-              data-tone={arrow.tone}
-              x1={geometry.x1}
-              y1={geometry.y1}
-              x2={geometry.x2}
-              y2={geometry.y2}
-              stroke={appearance.color}
-              strokeOpacity={appearance.opacity}
-              strokeWidth={appearance.width}
-              strokeLinecap="round"
-              markerEnd={`url(#${markerPrefix}-arrow-${index})`}
-            />
+            <g key={`arrow-${arrow.key}`}>
+              <line
+                aria-hidden="true"
+                x1={geometry.x1}
+                y1={geometry.y1}
+                x2={geometry.x2}
+                y2={geometry.y2}
+                stroke={appearance.outline}
+                strokeOpacity={Math.max(0.7, appearance.opacity)}
+                strokeWidth={appearance.width + 6}
+                strokeLinecap="round"
+              />
+              <line
+                data-testid={`guidance-arrow-${arrow.rank ?? "played"}`}
+                data-source={arrow.sourceSquare}
+                data-target={arrow.targetSquare}
+                data-tone={arrow.tone}
+                data-head-visible="true"
+                x1={geometry.x1}
+                y1={geometry.y1}
+                x2={geometry.x2}
+                y2={geometry.y2}
+                stroke={appearance.color}
+                strokeOpacity={appearance.opacity}
+                strokeWidth={appearance.width}
+                strokeLinecap="round"
+                markerEnd={`url(#${markerPrefix}-arrow-${index})`}
+              />
+            </g>
           );
         })}
         {arrows.map((arrow, index) => {
           const target = squareCenter(arrow.targetSquare, orientation);
-          const total = destinationTotals.get(arrow.targetSquare) ?? 1;
-          const labelIndex = destinationIndexes[index];
-          const x = Math.min(734, Math.max(66, target.x));
-          const labelSpacing = 36;
-          const idealGroupStart = target.y - ((total - 1) * labelSpacing) / 2;
-          const groupStart = Math.min(
-            782 - (total - 1) * labelSpacing,
-            Math.max(18, idealGroupStart),
-          );
-          const y = groupStart + labelIndex * labelSpacing;
-          const appearance = arrowAppearance(arrow);
-          const text = arrow.rank
-            ? `${arrow.rank} · ${arrow.evaluation}${arrow.played ? ` · ${arrow.warningSymbol ?? "●"}` : ""}`
-            : arrow.warningSymbol ?? "!";
+          const corner = BADGE_CORNERS[badgeCornerIndexes[index]];
+          const x = target.x + corner.x;
+          const y = target.y + corner.y;
           return (
             <g
-              key={`label-${arrow.key}`}
-              className="guidance-label"
+              key={`badge-${arrow.key}`}
+              className={`guidance-badge rating-${arrow.classification}`}
               data-testid={`guidance-label-${arrow.rank ?? "played"}`}
               data-label-x={x}
               data-label-y={y}
+              data-corner={corner.name}
               transform={`translate(${x} ${y})`}
             >
-              <rect x="-66" y="-15" width="132" height="30" rx="10" fill="#fffdf8" stroke={appearance.color} strokeWidth="3" />
-              <text textAnchor="middle" dominantBaseline="central" fill="#20372b">{text}</text>
+              <circle className="guidance-score-circle" r="22" />
+              <text className="guidance-score" textAnchor="middle" dominantBaseline="central">
+                {arrow.evaluation ?? "—"}
+              </text>
+              <circle className="guidance-icon-circle" cx="-14" cy="-14" r="10" />
+              <g
+                className="guidance-rating-icon"
+                transform="translate(-20.6 -20.6) scale(.55)"
+                fill="none"
+                strokeWidth="2.2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              >
+                <RatingIconGlyph classification={arrow.classification} />
+              </g>
             </g>
           );
         })}
       </svg>
       <span id={descriptionId} className="sr-only">
-        {arrows.map((arrow) => arrow.rank
-          ? t("guidanceRankedArrow", {
-            rank: arrow.rank,
+        {arrows.map((arrow) => arrow.played
+          ? t(arrow.tone === "blunder" ? "guidanceBlunderArrow" : "guidanceWarningArrow", {
+            classification: ratingLabel(arrow.classification, t),
             evaluation: arrow.evaluation ?? "—",
             from: arrow.sourceSquare,
             to: arrow.targetSquare,
           })
-          : t(arrow.tone === "blunder" ? "guidanceBlunderArrow" : "guidanceWarningArrow", {
+          : t("guidanceRankedArrow", {
+            rank: arrow.rank ?? "—",
+            classification: ratingLabel(arrow.classification, t),
+            evaluation: arrow.evaluation ?? "—",
             from: arrow.sourceSquare,
             to: arrow.targetSquare,
           })).join(" ")}
